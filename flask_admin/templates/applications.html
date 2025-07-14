@@ -1,0 +1,577 @@
+{% extends "base.html" %}
+
+{% block title %}Applications - SSO Admin Panel{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="bi bi-grid-3x3-gap"></i> OAuth Applications
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createAppModal">
+            <i class="bi bi-plus-circle"></i> New Application
+        </button>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="card bg-primary text-white mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-white-75 small">Total Applications</div>
+                        <div class="text-lg fw-bold">{{ applications|length }}</div>
+                    </div>
+                    <i class="bi bi-grid-3x3-gap" style="font-size: 2rem; opacity: 0.7;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card bg-success text-white mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-white-75 small">Active Applications</div>
+                        <div class="text-lg fw-bold">{{ applications|selectattr('is_active')|list|length }}</div>
+                    </div>
+                    <i class="bi bi-check-circle" style="font-size: 2rem; opacity: 0.7;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card bg-warning text-white mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-white-75 small">Inactive Applications</div>
+                        <div class="text-lg fw-bold">{{ applications|rejectattr('is_active')|list|length }}</div>
+                    </div>
+                    <i class="bi bi-pause-circle" style="font-size: 2rem; opacity: 0.7;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card bg-info text-white mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-white-75 small">Confidential Apps</div>
+                        <div class="text-lg fw-bold">{{ applications|selectattr('is_confidential')|list|length }}</div>
+                    </div>
+                    <i class="bi bi-shield-lock" style="font-size: 2rem; opacity: 0.7;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Applications Table -->
+<div class="card">
+    <div class="card-header">
+        <div class="row align-items-center">
+            <div class="col">
+                <h5 class="mb-0">Applications List</h5>
+            </div>
+            <div class="col-auto">
+                <div class="input-group input-group-sm">
+                    <input type="text" class="form-control" placeholder="Search applications..." id="searchInput">
+                    <button class="btn btn-outline-secondary" type="button">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        {% if applications %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="applicationsTable">
+                <thead class="table-light">
+                    <tr>
+                        <th>Application</th>
+                        <th>Client ID</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Redirect URIs</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for app in applications %}
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="avatar-sm me-3">
+                                    <div class="avatar-title rounded bg-primary text-white">
+                                        {{ app.name[0].upper() if app.name else 'A' }}
+                                    </div>
+                                </div>
+                                <div>
+                                    <h6 class="mb-0">{{ app.name }}</h6>
+                                    {% if app.description %}
+                                        <small class="text-muted">{{ app.description[:50] }}{% if app.description|length > 50 %}...{% endif %}</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <code class="small">{{ app.client_id }}</code>
+                            <button class="btn btn-sm btn-outline-secondary ms-1" 
+                                    onclick="copyToClipboard('{{ app.client_id }}')"
+                                    title="Copy Client ID">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </td>
+                        <td>
+                            {% if app.is_confidential %}
+                                <span class="badge bg-primary">
+                                    <i class="bi bi-shield-lock"></i> Confidential
+                                </span>
+                            {% else %}
+                                <span class="badge bg-secondary">
+                                    <i class="bi bi-unlock"></i> Public
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if app.is_active %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-circle"></i> Active
+                                </span>
+                            {% else %}
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-x-circle"></i> Inactive
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if app.redirect_uris %}
+                                {% set uris = app.redirect_uris.split(',') if app.redirect_uris is string else app.redirect_uris %}
+                                <div class="small">
+                                    {% for uri in uris[:2] %}
+                                        <div class="text-truncate" style="max-width: 200px;" title="{{ uri.strip() }}">
+                                            {{ uri.strip() }}
+                                        </div>
+                                    {% endfor %}
+                                    {% if uris|length > 2 %}
+                                        <small class="text-muted">+{{ uris|length - 2 }} more</small>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <span class="text-muted">None</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small class="text-muted">{{ app.created_at | datetime }}</small>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-primary" 
+                                        onclick="viewApplication('{{ app.id }}')"
+                                        title="View Details">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" 
+                                        onclick="editApplication('{{ app.id }}')"
+                                        title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                {% if app.is_active %}
+                                    <button type="button" class="btn btn-outline-warning" 
+                                            onclick="toggleApplicationStatus('{{ app.id }}', false)"
+                                            title="Deactivate">
+                                        <i class="bi bi-pause"></i>
+                                    </button>
+                                {% else %}
+                                    <button type="button" class="btn btn-outline-success" 
+                                            onclick="toggleApplicationStatus('{{ app.id }}', true)"
+                                            title="Activate">
+                                        <i class="bi bi-play"></i>
+                                    </button>
+                                {% endif %}
+                                <button type="button" class="btn btn-outline-danger" 
+                                        onclick="deleteApplication('{{ app.id }}', '{{ app.name }}')"
+                                        title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-grid-3x3-gap text-muted" style="font-size: 4rem;"></i>
+            <h5 class="mt-3 text-muted">No Applications Found</h5>
+            <p class="text-muted">Create your first OAuth application to get started.</p>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createAppModal">
+                <i class="bi bi-plus-circle"></i> Create Application
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Create Application Modal -->
+<div class="modal fade" id="createAppModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-plus-circle"></i> Create New Application
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="createAppForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="appName" class="form-label">Application Name *</label>
+                            <input type="text" class="form-control" id="appName" name="name" required
+                                   placeholder="My Application">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="appClientId" class="form-label">Client ID *</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="appClientId" name="client_id" required
+                                       placeholder="my-app-client-id">
+                                <button type="button" class="btn btn-outline-secondary" onclick="generateClientId()">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                            </div>
+                            <div class="form-text">Unique identifier for your application</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="appDescription" class="form-label">Description</label>
+                        <textarea class="form-control" id="appDescription" name="description" rows="3"
+                                  placeholder="Brief description of your application"></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="appIsConfidential" 
+                                       name="is_confidential" checked>
+                                <label class="form-check-label" for="appIsConfidential">
+                                    Confidential Application
+                                </label>
+                            </div>
+                            <div class="form-text">Confidential apps can securely store client secrets</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="appIsActive" 
+                                       name="is_active" checked>
+                                <label class="form-check-label" for="appIsActive">
+                                    Active
+                                </label>
+                            </div>
+                            <div class="form-text">Active applications can be used for authentication</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="appRedirectUris" class="form-label">Redirect URIs</label>
+                        <textarea class="form-control" id="appRedirectUris" name="redirect_uris" rows="3"
+                                  placeholder="https://myapp.com/callback&#10;https://myapp.com/auth/callback"></textarea>
+                        <div class="form-text">One URI per line. These are the allowed callback URLs for OAuth flows.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="appScopes" class="form-label">Default Scopes</label>
+                        <input type="text" class="form-control" id="appScopes" name="scopes"
+                               placeholder="read write profile" value="read">
+                        <div class="form-text">Space-separated list of default OAuth scopes</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-circle"></i> Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-circle"></i> Create Application
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Application Details Modal -->
+<div class="modal fade" id="appDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-eye"></i> Application Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="appDetailsContent">
+                <!-- Content will be loaded dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Search functionality
+    document.getElementById('searchInput').addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        const table = document.getElementById('applicationsTable');
+        const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+        
+        for (let row of rows) {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(searchTerm) ? '' : 'none';
+        }
+    });
+    
+    // Generate random client ID
+    function generateClientId() {
+        const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+        let result = '';
+        for (let i = 0; i < 16; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        document.getElementById('appClientId').value = result;
+    }
+    
+    // Copy to clipboard
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(function() {
+            // Show toast or notification
+            showToast('Client ID copied to clipboard!', 'success');
+        });
+    }
+    
+    // View application details
+    function viewApplication(appId) {
+        fetch(`/api/admin/applications/${appId}`)
+            .then(response => response.json())
+            .then(app => {
+                const content = `
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Basic Information</h6>
+                            <table class="table table-sm">
+                                <tr><td><strong>Name:</strong></td><td>${app.name}</td></tr>
+                                <tr><td><strong>Client ID:</strong></td><td><code>${app.client_id}</code></td></tr>
+                                <tr><td><strong>Type:</strong></td><td>${app.is_confidential ? 'Confidential' : 'Public'}</td></tr>
+                                <tr><td><strong>Status:</strong></td><td>${app.is_active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-danger">Inactive</span>'}</td></tr>
+                                <tr><td><strong>Created:</strong></td><td>${new Date(app.created_at).toLocaleString()}</td></tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Configuration</h6>
+                            <div class="mb-3">
+                                <strong>Description:</strong>
+                                <p class="text-muted">${app.description || 'No description provided'}</p>
+                            </div>
+                            <div class="mb-3">
+                                <strong>Default Scopes:</strong>
+                                <p class="text-muted">${app.scopes || 'None'}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-12">
+                            <h6>Redirect URIs</h6>
+                            ${app.redirect_uris ? 
+                                app.redirect_uris.split(',').map(uri => `<code class="d-block mb-1">${uri.trim()}</code>`).join('') : 
+                                '<p class="text-muted">No redirect URIs configured</p>'
+                            }
+                        </div>
+                    </div>
+                `;
+                document.getElementById('appDetailsContent').innerHTML = content;
+                new bootstrap.Modal(document.getElementById('appDetailsModal')).show();
+            })
+            .catch(error => {
+                showToast('Error loading application details', 'error');
+            });
+    }
+    
+    // Edit application (placeholder)
+    function editApplication(appId) {
+        showToast('Edit functionality coming soon!', 'info');
+    }
+    
+    // Toggle application status
+    function toggleApplicationStatus(appId, newStatus) {
+        const action = newStatus ? 'activate' : 'deactivate';
+        if (confirm(`Are you sure you want to ${action} this application?`)) {
+            fetch(`/api/admin/applications/${appId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ is_active: newStatus })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(`Application ${action}d successfully!`, 'success');
+                    location.reload();
+                } else {
+                    showToast(`Error ${action}ing application`, 'error');
+                }
+            })
+            .catch(error => {
+                showToast(`Error ${action}ing application`, 'error');
+            });
+        }
+    }
+    
+    // Delete application
+    function deleteApplication(appId, appName) {
+        if (confirm(`Are you sure you want to delete "${appName}"? This action cannot be undone.`)) {
+            fetch(`/api/admin/applications/${appId}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Application deleted successfully!', 'success');
+                    location.reload();
+                } else {
+                    showToast('Error deleting application', 'error');
+                }
+            })
+            .catch(error => {
+                showToast('Error deleting application', 'error');
+            });
+        }
+    }
+    
+    // Create application form submission
+    document.getElementById('createAppForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const data = {
+            name: formData.get('name'),
+            client_id: formData.get('client_id'),
+            description: formData.get('description'),
+            is_confidential: formData.get('is_confidential') === 'on',
+            is_active: formData.get('is_active') === 'on',
+            redirect_uris: formData.get('redirect_uris'),
+            scopes: formData.get('scopes')
+        };
+        
+        fetch('/api/admin/applications', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Application created successfully!', 'success');
+                bootstrap.Modal.getInstance(document.getElementById('createAppModal')).hide();
+                location.reload();
+            } else {
+                showToast('Error creating application: ' + (data.message || 'Unknown error'), 'error');
+            }
+        })
+        .catch(error => {
+            showToast('Error creating application', 'error');
+        });
+    });
+    
+    // Toast notification function
+    function showToast(message, type = 'info') {
+        // Create toast element if it doesn't exist
+        let toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toast-container';
+            toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+            toastContainer.style.zIndex = '1055';
+            document.body.appendChild(toastContainer);
+        }
+        
+        const toastId = 'toast-' + Date.now();
+        const bgClass = type === 'success' ? 'bg-success' : type === 'error' ? 'bg-danger' : 'bg-info';
+        
+        const toastHtml = `
+            <div id="${toastId}" class="toast ${bgClass} text-white" role="alert">
+                <div class="toast-body">
+                    ${message}
+                </div>
+            </div>
+        `;
+        
+        toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+        toast.show();
+        
+        // Remove toast element after it's hidden
+        toastElement.addEventListener('hidden.bs.toast', function() {
+            toastElement.remove();
+        });
+    }
+    
+    // Generate client ID on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        generateClientId();
+    });
+</script>
+
+<style>
+    .avatar-sm {
+        width: 40px;
+        height: 40px;
+    }
+    
+    .avatar-title {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 1.2rem;
+    }
+    
+    .text-lg {
+        font-size: 1.5rem;
+    }
+    
+    .text-truncate {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .table th {
+        font-weight: 600;
+        border-top: none;
+    }
+    
+    .btn-group-sm > .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+</style>
+{% endblock %}

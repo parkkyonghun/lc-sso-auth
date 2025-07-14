@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  flask-admin:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - SSO_API_URL=http://host.docker.internal:8000
+    volumes:
+      - .:/app
+      - /app/__pycache__
+    restart: unless-stopped
+    depends_on:
+      - redis
+    networks:
+      - flask-admin-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6381:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - flask-admin-network
+    command: redis-server --appendonly yes
+
+volumes:
+  redis_data:
+
+networks:
+  flask-admin-network:
+    driver: bridge

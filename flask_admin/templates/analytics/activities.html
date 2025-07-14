@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}Activity Logs - SSO Admin Panel{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="bi bi-clock-history"></i> Activity Logs</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <button type="button" class="btn btn-outline-secondary" onclick="location.reload()">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+            <button type="button" class="btn btn-outline-primary" onclick="exportLogs()">
+                <i class="bi bi-download"></i> Export
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Controls -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label for="activityType" class="form-label">Activity Type</label>
+                <select class="form-select" id="activityType">
+                    <option value="">All Activities</option>
+                    <option value="user_registration">User Registration</option>
+                    <option value="user_login">User Login</option>
+                    <option value="user_logout">User Logout</option>
+                    <option value="app_creation">App Creation</option>
+                    <option value="oauth_authorization">OAuth Authorization</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="dateFrom" class="form-label">From Date</label>
+                <input type="date" class="form-control" id="dateFrom">
+            </div>
+            <div class="col-md-3">
+                <label for="dateTo" class="form-label">To Date</label>
+                <input type="date" class="form-control" id="dateTo">
+            </div>
+            <div class="col-md-3">
+                <label for="userFilter" class="form-label">User</label>
+                <input type="text" class="form-control" id="userFilter" placeholder="Search by username...">
+            </div>
+        </div>
+        <div class="row mt-3">
+            <div class="col-12">
+                <button type="button" class="btn btn-primary" onclick="applyFilters()">
+                    <i class="bi bi-funnel"></i> Apply Filters
+                </button>
+                <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Activities List -->
+<div class="card">
+    <div class="card-header">
+        <div class="row align-items-center">
+            <div class="col">
+                <h5 class="mb-0">Recent Activities</h5>
+                <small class="text-muted">Showing {{ activities|length }} activities</small>
+            </div>
+            <div class="col-auto">
+                <div class="input-group input-group-sm">
+                    <input type="text" class="form-control" placeholder="Search activities..." id="searchInput">
+                    <button class="btn btn-outline-secondary" type="button">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        {% if activities %}
+        <div class="list-group list-group-flush" id="activitiesList">
+            {% for activity in activities %}
+            <div class="list-group-item">
+                <div class="d-flex w-100 justify-content-between align-items-start">
+                    <div class="d-flex align-items-start">
+                        <div class="activity-icon me-3">
+                            {% if activity.type == 'user_registration' %}
+                                <i class="bi bi-person-plus text-success"></i>
+                            {% elif activity.type == 'user_login' %}
+                                <i class="bi bi-box-arrow-in-right text-primary"></i>
+                            {% elif activity.type == 'user_logout' %}
+                                <i class="bi bi-box-arrow-right text-secondary"></i>
+                            {% elif activity.type == 'app_creation' %}
+                                <i class="bi bi-plus-circle text-info"></i>
+                            {% elif activity.type == 'oauth_authorization' %}
+                                <i class="bi bi-shield-check text-warning"></i>
+                            {% else %}
+                                <i class="bi bi-activity text-muted"></i>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <h6 class="mb-1">
+                                {% if activity.type == 'user_registration' %}
+                                    New User Registration
+                                {% elif activity.type == 'user_login' %}
+                                    User Login
+                                {% elif activity.type == 'user_logout' %}
+                                    User Logout
+                                {% elif activity.type == 'app_creation' %}
+                                    Application Created
+                                {% elif activity.type == 'oauth_authorization' %}
+                                    OAuth Authorization
+                                {% else %}
+                                    {{ activity.type|title }}
+                                {% endif %}
+                            </h6>
+                            <p class="mb-1">{{ activity.description or 'No description available' }}</p>
+                            <small class="text-muted">
+                                User: <strong>{{ activity.user_username or 'System' }}</strong>
+                                {% if activity.ip_address %}
+                                    | IP: {{ activity.ip_address }}
+                                {% endif %}
+                                {% if activity.user_agent %}
+                                    | {{ activity.user_agent[:50] }}...
+                                {% endif %}
+                            </small>
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <small class="text-muted">{{ activity.created_at or 'Unknown time' }}</small>
+                        {% if activity.status %}
+                            <br>
+                            {% if activity.status == 'success' %}
+                                <span class="badge bg-success">Success</span>
+                            {% elif activity.status == 'failed' %}
+                                <span class="badge bg-danger">Failed</span>
+                            {% elif activity.status == 'pending' %}
+                                <span class="badge bg-warning">Pending</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ activity.status|title }}</span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <!-- Pagination -->
+        <div class="card-footer">
+            <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted">Showing {{ activities|length }} of {{ activities|length }} activities</small>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item disabled">
+                            <a class="page-link" href="#" tabindex="-1">Previous</a>
+                        </li>
+                        <li class="page-item active">
+                            <a class="page-link" href="#">1</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="#">2</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="#">3</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="#">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-clock-history text-muted" style="font-size: 4rem;"></i>
+            <h5 class="mt-3 text-muted">No Activities Found</h5>
+            <p class="text-muted">No activities match your current filters.</p>
+            <button type="button" class="btn btn-outline-primary" onclick="clearFilters()">
+                <i class="bi bi-x-circle"></i> Clear Filters
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function applyFilters() {
+        const activityType = document.getElementById('activityType').value;
+        const dateFrom = document.getElementById('dateFrom').value;
+        const dateTo = document.getElementById('dateTo').value;
+        const userFilter = document.getElementById('userFilter').value;
+        
+        // Build query parameters
+        const params = new URLSearchParams();
+        if (activityType) params.append('type', activityType);
+        if (dateFrom) params.append('from', dateFrom);
+        if (dateTo) params.append('to', dateTo);
+        if (userFilter) params.append('user', userFilter);
+        
+        // Reload page with filters
+        const url = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+        window.location.href = url;
+    }
+    
+    function clearFilters() {
+        document.getElementById('activityType').value = '';
+        document.getElementById('dateFrom').value = '';
+        document.getElementById('dateTo').value = '';
+        document.getElementById('userFilter').value = '';
+        window.location.href = window.location.pathname;
+    }
+    
+    function exportLogs() {
+        // TODO: Implement export functionality
+        alert('Export functionality will be implemented soon!');
+    }
+    
+    // Search functionality
+    document.getElementById('searchInput').addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        const activities = document.querySelectorAll('#activitiesList .list-group-item');
+        
+        activities.forEach(activity => {
+            const text = activity.textContent.toLowerCase();
+            activity.style.display = text.includes(searchTerm) ? '' : 'none';
+        });
+    });
+    
+    // Set default date range (last 7 days)
+    document.addEventListener('DOMContentLoaded', function() {
+        const today = new Date();
+        const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+        
+        document.getElementById('dateTo').value = today.toISOString().split('T')[0];
+        document.getElementById('dateFrom').value = lastWeek.toISOString().split('T')[0];
+    });
+</script>
+{% endblock %}

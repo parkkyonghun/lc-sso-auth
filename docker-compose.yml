@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  sso-api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://sso_user:sso_password@postgres:5432/sso_db
+      - CACHE_URL=redis://dragonfly:6379
+      - JWT_ALGORITHM=RS256
+      - JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY:-your-private-key}
+      - JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY:-your-public-key}
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-here}
+      - DEBUG=true
+      - APP_NAME=FastAPI SSO
+      - APP_DESCRIPTION=A comprehensive Single Sign-On solution
+      - APP_VERSION=1.0.0
+      - REDIS_MAX_CONNECTIONS=20
+      - REDIS_RETRY_ON_TIMEOUT=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    restart: unless-stopped
+    networks:
+      - sso_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  flask-admin:
+    build: ./flask_admin
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - SSO_API_URL=http://sso-api:8000
+      - CACHE_URL=redis://dragonfly:6379/1
+    volumes:
+      - ./flask_admin:/app
+      - /app/__pycache__
+    restart: unless-stopped
+    depends_on:
+      dragonfly:
+        condition: service_healthy
+      sso-api:
+        condition: service_healthy
+    networks:
+      - sso_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=sso_db
+      - POSTGRES_USER=sso_user
+      - POSTGRES_PASSWORD=sso_password
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    networks:
+      - sso_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sso_user -d sso_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - dragonfly_data:/data
+    command: >
+      dragonfly
+      --logtostderr
+      --alsologtostderr=false
+      --maxmemory=1gb
+      --cache_mode=true
+      --keys_output_limit=12288
+      --dbnum=16
+      --snapshot_cron="0 */6 * * *"
+    networks:
+      - sso_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Optional: pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@sso.local
+      - PGADMIN_DEFAULT_PASSWORD=admin123
+      - PGADMIN_CONFIG_SERVER_MODE=False
+      - PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED=False
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    restart: unless-stopped
+    networks:
+      - sso_network
+
+volumes:
+  postgres_data:
+  dragonfly_data:
+  pgadmin_data:
+
+networks:
+  sso_network:
+    driver: bridge

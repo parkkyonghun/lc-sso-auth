@@ -1,0 +1,290 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Manage Roles - {{ user.username }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h3 class="card-title">
+                        <i class="fas fa-user-cog text-primary"></i>
+                        Manage Roles for: {{ user.username }}
+                    </h3>
+                    <div>
+                        <a href="{{ url_for('main.users') }}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left"></i> Back to Users
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- User Information -->
+                        <div class="col-md-4">
+                            <div class="user-info-section">
+                                <h5 class="section-title">
+                                    <i class="fas fa-user text-info"></i>
+                                    User Information
+                                </h5>
+                                <div class="user-details">
+                                    <div class="detail-item">
+                                        <strong>Username:</strong> {{ user.username }}
+                                    </div>
+                                    <div class="detail-item">
+                                        <strong>Email:</strong> {{ user.email }}
+                                    </div>
+                                    <div class="detail-item">
+                                        <strong>Status:</strong>
+                                        {% if user.is_active %}
+                                            <span class="badge badge-success">Active</span>
+                                        {% else %}
+                                            <span class="badge badge-danger">Inactive</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="detail-item">
+                                        <strong>Super Admin:</strong>
+                                        {% if user.is_superuser %}
+                                            <span class="badge badge-danger">Yes</span>
+                                        {% else %}
+                                            <span class="badge badge-secondary">No</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="detail-item">
+                                        <strong>Current Roles:</strong>
+                                        <span class="badge badge-primary">{{ user_roles|length }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Current Roles -->
+                        <div class="col-md-4">
+                            <div class="roles-section">
+                                <h5 class="section-title">
+                                    <i class="fas fa-user-tag text-success"></i>
+                                    Current Roles
+                                </h5>
+                                {% if user_roles %}
+                                    <div class="current-roles">
+                                        {% for role in user_roles %}
+                                        <div class="role-item">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong>{{ role.role_name }}</strong>
+                                                    <br>
+                                                    <small class="text-muted">{{ role.description or 'No description' }}</small>
+                                                </div>
+                                                <div>
+                                                    <form method="POST" action="{{ url_for('roles.remove_role_from_user', user_id=user.id, role_id=role.id) }}" 
+                                                          style="display: inline;" onsubmit="return confirm('Remove role {{ role.role_name }}?')">
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove Role">
+                                                            <i class="fas fa-times"></i>
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <div class="alert alert-info">
+                                        <i class="fas fa-info-circle"></i>
+                                        User has no roles assigned.
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Assign New Role -->
+                        <div class="col-md-4">
+                            <div class="assign-role-section">
+                                <h5 class="section-title">
+                                    <i class="fas fa-plus-circle text-warning"></i>
+                                    Assign New Role
+                                </h5>
+                                <form method="POST" action="{{ url_for('roles.assign_role_to_user', user_id=user.id) }}">
+                                    <div class="form-group">
+                                        <label for="role_id">Select Role:</label>
+                                        <select name="role_id" id="role_id" class="form-control" required>
+                                            <option value="">-- Select a Role --</option>
+                                            {% for role in all_roles %}
+                                                {% if role not in user_roles %}
+                                                <option value="{{ role.id }}">
+                                                    {{ role.role_name }}
+                                                    {% if role.description %}
+                                                        - {{ role.description[:50] }}{% if role.description|length > 50 %}...{% endif %}
+                                                    {% endif %}
+                                                </option>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary btn-block">
+                                        <i class="fas fa-plus"></i> Assign Role
+                                    </button>
+                                </form>
+
+                                <!-- Available Roles Info -->
+                                <div class="mt-3">
+                                    <small class="text-muted">
+                                        <strong>Available Roles:</strong> {{ (all_roles|length) - (user_roles|length) }}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- User Permissions Summary -->
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <div class="permissions-section">
+                                <h5 class="section-title">
+                                    <i class="fas fa-key text-primary"></i>
+                                    Effective Permissions
+                                    <span class="badge badge-info ml-2">{{ user_permissions|length }}</span>
+                                </h5>
+                                {% if user_permissions %}
+                                    <div class="permissions-grid">
+                                        {% for permission in user_permissions %}
+                                        <div class="permission-item">
+                                            <i class="fas fa-check-circle text-success"></i>
+                                            {{ permission }}
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <div class="alert alert-warning">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                        User has no permissions through assigned roles.
+                                        {% if user.is_superuser %}
+                                            However, user has super admin privileges.
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.user-info-section,
+.roles-section,
+.assign-role-section,
+.permissions-section {
+    background: #f8f9fa;
+    border-radius: 0.375rem;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    border: 1px solid #e9ecef;
+    height: fit-content;
+}
+
+.section-title {
+    color: #495057;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.detail-item {
+    margin-bottom: 0.75rem;
+    padding: 0.5rem;
+    background: white;
+    border-radius: 0.25rem;
+    border: 1px solid #e9ecef;
+}
+
+.role-item {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 0.375rem;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    transition: all 0.2s ease;
+}
+
+.role-item:hover {
+    border-color: #007bff;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.15);
+}
+
+.current-roles {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.permissions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 0.5rem;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.permission-item {
+    background: #e7f3ff;
+    border: 1px solid #b3d9ff;
+    border-radius: 0.25rem;
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    color: #0056b3;
+}
+
+.badge {
+    font-size: 0.75em;
+}
+
+.form-control {
+    border-radius: 0.375rem;
+}
+
+.btn {
+    border-radius: 0.375rem;
+}
+
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    border: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.btn-outline-danger:hover {
+    transform: translateY(-1px);
+    transition: all 0.2s;
+}
+
+.alert {
+    border-radius: 0.375rem;
+}
+</style>
+
+<script>
+// Auto-refresh permissions when roles change
+function refreshPermissions() {
+    fetch(`{{ url_for('roles.get_user_permissions_api', user_id=user.id) }}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.permissions) {
+                // Update permissions display
+                console.log('Updated permissions:', data.permissions);
+            }
+        })
+        .catch(error => console.error('Error refreshing permissions:', error));
+}
+
+// Refresh permissions after role assignment/removal
+document.addEventListener('DOMContentLoaded', function() {
+    const forms = document.querySelectorAll('form');
+    forms.forEach(form => {
+        form.addEventListener('submit', function() {
+            setTimeout(refreshPermissions, 1000);
+        });
+    });
+});
+</script>
+{% endblock %}

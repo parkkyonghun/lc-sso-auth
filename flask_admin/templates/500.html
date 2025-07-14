@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Server Error - SSO Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="text-center">
+                <div class="error-page">
+                    <div class="error-code">
+                        <i class="bi bi-exclamation-octagon" style="font-size: 6rem; color: #dc3545;"></i>
+                        <h1 class="display-1 fw-bold text-muted">500</h1>
+                    </div>
+                    
+                    <div class="error-content mt-4">
+                        <h2 class="h3 mb-3">Internal Server Error</h2>
+                        <p class="text-muted mb-4">
+                            Something went wrong on our end. We're working to fix this issue.
+                            Please try again later or contact the administrator if the problem persists.
+                        </p>
+                        
+                        <div class="alert alert-light border" role="alert">
+                            <i class="bi bi-info-circle"></i>
+                            <strong>What you can do:</strong>
+                            <ul class="list-unstyled mt-2 mb-0">
+                                <li>• Refresh the page</li>
+                                <li>• Try again in a few minutes</li>
+                                <li>• Contact support if the issue continues</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-center mt-4">
+                            <a href="{{ url_for('main.dashboard') }}" class="btn btn-primary">
+                                <i class="bi bi-house"></i> Go to Dashboard
+                            </a>
+                            <button onclick="location.reload()" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh Page
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.error-page {
+    padding: 3rem 0;
+}
+
+.error-code {
+    margin-bottom: 2rem;
+}
+
+.error-content {
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.alert {
+    text-align: left;
+}
+
+@media (max-width: 768px) {
+    .error-page {
+        padding: 2rem 0;
+    }
+    
+    .display-1 {
+        font-size: 4rem;
+    }
+    
+    .bi-exclamation-octagon {
+        font-size: 4rem !important;
+    }
+}
+</style>
+{% endblock %}

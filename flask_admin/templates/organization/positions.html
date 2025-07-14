@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+
+{% block title %}Position Management - SSO Admin Panel{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="bi bi-briefcase"></i> Position Management</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPositionModal">
+                <i class="bi bi-plus-circle"></i> New Position
+            </button>
+            <button type="button" class="btn btn-outline-secondary" onclick="location.reload()">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">Total Positions</div>
+                        <div class="h5 mb-0 font-weight-bold">{{ positions|length }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-briefcase" style="font-size: 2rem; opacity: 0.3"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">Active Positions</div>
+                        <div class="h5 mb-0 font-weight-bold">{{ positions|length }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-check-circle" style="font-size: 2rem; opacity: 0.3; color: green;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Positions Table -->
+<div class="card">
+    <div class="card-header">
+        <div class="row align-items-center">
+            <div class="col">
+                <h5 class="mb-0">Positions List</h5>
+            </div>
+            <div class="col-auto">
+                <div class="input-group input-group-sm">
+                    <input type="text" class="form-control" placeholder="Search positions..." id="searchInput">
+                    <button class="btn btn-outline-secondary" type="button">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        {% if positions %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="positionsTable">
+                <thead class="table-light">
+                    <tr>
+                        <th>Position Title</th>
+                        <th>Department</th>
+                        <th>Employees</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for position in positions %}
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="avatar-sm me-2">
+                                    <div class="avatar-title rounded-circle bg-success text-white">
+                                        {{ position.title[0].upper() if position.title else 'P' }}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="fw-semibold">{{ position.title }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge bg-info">{{ position.department_name or 'N/A' }}</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary">0 employees</span>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-primary" 
+                                        onclick="editPosition('{{ position.id }}', '{{ position.title }}', '{{ position.department_id }}')"
+                                        title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-info" 
+                                        onclick="viewEmployees('{{ position.id }}', '{{ position.title }}')"
+                                        title="View Employees">
+                                    <i class="bi bi-people"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-danger" 
+                                        onclick="deletePosition('{{ position.id }}', '{{ position.title }}')"
+                                        title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-briefcase text-muted" style="font-size: 4rem;"></i>
+            <h5 class="mt-3 text-muted">No Positions Found</h5>
+            <p class="text-muted">Create your first position to get started.</p>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPositionModal">
+                <i class="bi bi-plus-circle"></i> Create First Position
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Create Position Modal -->
+<div class="modal fade" id="createPositionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create New Position</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="createPositionForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="positionTitle" class="form-label">Position Title *</label>
+                        <input type="text" class="form-control" id="positionTitle" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="positionDepartment" class="form-label">Department *</label>
+                        <select class="form-select" id="positionDepartment" required>
+                            <option value="">Select Department...</option>
+                            <!-- Departments will be loaded dynamically -->
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="positionDescription" class="form-label">Description</label>
+                        <textarea class="form-control" id="positionDescription" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Position</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Position Modal -->
+<div class="modal fade" id="editPositionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Position</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editPositionForm">
+                <input type="hidden" id="editPositionId">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="editPositionTitle" class="form-label">Position Title *</label>
+                        <input type="text" class="form-control" id="editPositionTitle" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editPositionDepartment" class="form-label">Department *</label>
+                        <select class="form-select" id="editPositionDepartment" required>
+                            <option value="">Select Department...</option>
+                            <!-- Departments will be loaded dynamically -->
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editPositionDescription" class="form-label">Description</label>
+                        <textarea class="form-control" id="editPositionDescription" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Position</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function editPosition(id, title, departmentId) {
+        document.getElementById('editPositionId').value = id;
+        document.getElementById('editPositionTitle').value = title;
+        document.getElementById('editPositionDepartment').value = departmentId || '';
+        
+        const modal = new bootstrap.Modal(document.getElementById('editPositionModal'));
+        modal.show();
+    }
+    
+    function viewEmployees(id, title) {
+        // Navigate to users page filtered by position
+        window.location.href = `/users?position=${id}`;
+    }
+    
+    function deletePosition(id, title) {
+        if (confirm(`Are you sure you want to delete the position "${title}"? This action cannot be undone.`)) {
+            // TODO: Implement delete functionality
+            alert('Delete functionality will be implemented soon.');
+        }
+    }
+    
+    // Form submissions
+    document.getElementById('createPositionForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        // TODO: Implement create functionality
+        alert('Create functionality will be implemented soon.');
+    });
+    
+    document.getElementById('editPositionForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        // TODO: Implement update functionality
+        alert('Update functionality will be implemented soon.');
+    });
+    
+    // Search functionality
+    document.getElementById('searchInput').addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        const table = document.getElementById('positionsTable');
+        const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+        
+        for (let row of rows) {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(searchTerm) ? '' : 'none';
+        }
+    });
+    
+    // Load departments for dropdowns
+    function loadDepartments() {
+        // TODO: Load departments from API
+        // For now, add placeholder options
+        const selects = ['positionDepartment', 'editPositionDepartment'];
+        selects.forEach(selectId => {
+            const select = document.getElementById(selectId);
+            select.innerHTML = '<option value="">Select Department...</option>';
+            // Add placeholder departments
+            select.innerHTML += '<option value="1">IT Department</option>';
+            select.innerHTML += '<option value="2">HR Department</option>';
+            select.innerHTML += '<option value="3">Finance Department</option>';
+        });
+    }
+    
+    // Load departments when page loads
+    document.addEventListener('DOMContentLoaded', loadDepartments);
+</script>
+{% endblock %}
