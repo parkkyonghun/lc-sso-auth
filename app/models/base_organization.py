@@ -1,8 +1,6 @@
-from sqlalchemy import Column, String, Text
+from sqlalchemy import Column
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
-
-from ..core.database import Base
 
 class BaseOrganizationEntity:
     """

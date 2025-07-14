@@ -19,7 +19,7 @@ class CacheManager:
         except redis.RedisError:
             return None
     
-    def set(self, key: str, value: str, ex: int = None) -> bool:
+    def set(self, key: str, value: str, ex: Optional[int] = None) -> bool:
         """Set value in cache with optional expiration"""
         try:
             return self.redis_client.set(key, value, ex=ex)

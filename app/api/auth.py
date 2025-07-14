@@ -1,64 +1,59 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from typing import Optional
 
+from ..models.user import User
 from ..core.database import get_db
 from ..core.security import create_session, get_session, delete_session, decode_jwt, check_rate_limit
-from ..schemas.user import UserCreate, UserLogin, UserResponse, UserUpdate, PasswordChange
+from ..schemas.user import UserCreate, UserResponse, UserUpdate, PasswordChange
 from ..services.user_service import UserService
 
 router = APIRouter(tags=["Authentication"])
 security = HTTPBearer(auto_error=False)
 templates = Jinja2Templates(directory="templates")
 
-def get_current_user_from_session(request: Request, db: Session = Depends(get_db)) -> Optional[str]:
-    """Get current user ID from session cookie"""
-    session_id = request.cookies.get("session_id")
-    if not session_id:
-        return None
+def get_current_user(
+    request: Request, 
+    credentials: HTTPAuthorizationCredentials = Depends(security), 
+    db: Session = Depends(get_db)
+) -> Optional[User]:
+    """Get current user from session or token"""
+    user_id = None
     
-    session_data = get_session(session_id)
-    if not session_data:
-        return None
-    
-    return session_data.get("user_id")
-
-def get_current_user_from_token(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)) -> Optional[str]:
-    """Get current user ID from JWT token"""
-    if not credentials:
-        return None
-    
-    try:
-        payload = decode_jwt(credentials.credentials)
-        if payload.get("token_type") != "access_token":
-            return None
-        return payload.get("sub")
-    except:
-        return None
-
-def get_current_user(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)) -> Optional[str]:
-    """Get current user ID from session or token"""
     # Try session first
-    user_id = get_current_user_from_session(request, db)
-    if user_id:
-        return user_id
+    session_id = request.cookies.get("session_id")
+    if session_id:
+        session_data = get_session(session_id)
+        if session_data:
+            user_id = session_data.get("user_id")
     
-    # Try token
-    return get_current_user_from_token(credentials, db)
-
-def require_auth(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)) -> str:
-    """Require authentication and return user ID"""
-    user_id = get_current_user(request, credentials, db)
+    # If no session, try token
+    if not user_id and credentials:
+        try:
+            payload = decode_jwt(credentials.credentials)
+            if payload.get("token_type") == "access_token":
+                user_id = payload.get("sub")
+        except Exception:
+            pass  # Ignore token errors
+            
     if not user_id:
+        return None
+        
+    user_service = UserService(db)
+    return user_service.get_user_by_id(user_id)
+
+def require_auth(user: Optional[User] = Depends(get_current_user)) -> User:
+    """Require authentication and return user object"""
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"}
         )
-    return user_id
+    return user
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(
@@ -111,7 +106,7 @@ async def login(
     # --- Begin: API client detection and JSON response ---
     accept_header = request.headers.get("accept", "")
     x_requested_with = request.headers.get("x-requested-with", "")
-    is_api_client = "application/json" in accept_header or x_requested_with.lower() == "xmlhttprequest"
+    is_api_client = accept_header.lower() == "application/json" or x_requested_with.lower() == "xmlhttprequest"
     if is_api_client:
         from ..core.security import create_access_token
         access_token = create_access_token(str(user.id))
@@ -149,7 +144,7 @@ async def login_page(request: Request, next: Optional[str] = None):
 async def logout(
     response: Response,
     request: Request,
-    user_id: str = Depends(get_current_user)
+    user: User = Depends(get_current_user)
 ):
     """User logout"""
     session_id = request.cookies.get("session_id")
@@ -162,12 +157,12 @@ async def logout(
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(
-    user_id: str = Depends(require_auth),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Get current user information"""
     user_service = UserService(db)
-    user = user_service.get_user_by_id(user_id)
+    user = user_service.get_user_by_id(str(current_user.id))
     
     if not user:
         raise HTTPException(
@@ -180,12 +175,12 @@ async def get_current_user_info(
 @router.put("/me", response_model=UserResponse)
 async def update_current_user(
     user_data: UserUpdate,
-    user_id: str = Depends(require_auth),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Update current user information"""
     user_service = UserService(db)
-    user = user_service.update_user(user_id, user_data)
+    user = user_service.update_user(str(current_user.id), user_data)
     
     if not user:
         raise HTTPException(
@@ -198,12 +193,12 @@ async def update_current_user(
 @router.post("/change-password")
 async def change_password(
     password_data: PasswordChange,
-    user_id: str = Depends(require_auth),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Change user password"""
     user_service = UserService(db)
-    success = user_service.change_password(user_id, password_data)
+    success = user_service.change_password(str(current_user.id), password_data)
     
     if success:
         return {"message": "Password changed successfully"}
@@ -216,20 +211,10 @@ async def change_password(
 @router.get("/dashboard")
 async def dashboard(
     request: Request,
-    user_id: str = Depends(require_auth),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(require_auth)
 ):
     """User dashboard"""
-    user_service = UserService(db)
-    user = user_service.get_user_by_id(user_id)
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
     return templates.TemplateResponse(
         "dashboard.html",
-        {"request": request, "user": user}
+        {"request": request, "user": current_user}
     )

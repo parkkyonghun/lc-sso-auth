@@ -4,7 +4,7 @@ from datetime import datetime
 import uuid
 
 class ApplicationBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=255, description="Application name")
+    name: str = Field(..., description="Application name", min_length=1, max_length=255)
     description: Optional[str] = Field(None, max_length=1000, description="Application description")
     redirect_uris: List[str] = Field(..., min_items=1, description="Allowed redirect URIs")
     website_url: Optional[HttpUrl] = Field(None, description="Application website URL")
@@ -70,8 +70,8 @@ class ApplicationUpdate(BaseModel):
     terms_of_service_url: Optional[HttpUrl] = Field(None)
     logo_url: Optional[HttpUrl] = Field(None)
     require_consent: Optional[bool] = Field(None)
-    access_token_lifetime: Optional[int] = Field(None, ge=300, le=86400)
-    refresh_token_lifetime: Optional[int] = Field(None, ge=3600, le=2592000)
+    access_token_lifetime: Optional[int] = Field(default=None, ge=300, le=86400)
+    refresh_token_lifetime: Optional[int] = Field(default=None, ge=3600, le=2592000)
     is_active: Optional[bool] = Field(None)
 
 class ApplicationResponse(ApplicationBase):

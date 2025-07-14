@@ -2,12 +2,95 @@
 <html>
 <head>
     <title>Consent</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .consent-container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+        .logo {
+            max-width: 100px;
+            margin-bottom: 20px;
+        }
+        .scope-list {
+            list-style: none;
+            padding: 0;
+            text-align: left;
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+        .scope-list li {
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        .scope-list li strong {
+            color: #007bff;
+        }
+        .btn-group {
+            margin-top: 30px;
+        }
+        .btn-group .btn {
+            margin: 0 10px;
+        }
+        .info-links a {
+            margin: 0 10px;
+            color: #007bff;
+        }
+    </style>
 </head>
 <body>
-    <form method="post" action="/authorize">
-        <p>Do you consent to share your profile information?</p>
-        <button type="submit" name="consent" value="yes">Yes</button>
-        <button type="submit" name="consent" value="no">No</button>
-    </form>
+    <div class="consent-container">
+        {% if client_logo %}
+            <img src="{{ client_logo }}" alt="Client Logo" class="logo">
+        {% endif %}
+        <h2 class="mb-3">{{ client_name }} wants to access your account</h2>
+        {% if client_description %}
+            <p class="text-muted">{{ client_description }}</p>
+        {% endif %}
+
+        <p>This application is requesting access to the following information:</p>
+        <ul class="scope-list">
+            {% for scope in requested_scopes %}
+                <li><strong>{{ scope }}</strong></li>
+            {% endfor %}
+        </ul>
+
+        <form method="post" action="/oauth/consent">
+            <input type="hidden" name="client_id" value="{{ client_id }}">
+            <input type="hidden" name="scope" value="{{ scope }}">
+            <input type="hidden" name="redirect_uri" value="{{ redirect_uri }}">
+            <input type="hidden" name="state" value="{{ state }}">
+
+            <div class="btn-group">
+                <button type="submit" name="consent" value="true" class="btn btn-success btn-lg">Allow</button>
+                <button type="submit" name="consent" value="false" class="btn btn-danger btn-lg">Deny</button>
+            </div>
+        </form>
+
+        {% if privacy_policy_url or terms_of_service_url %}
+            <div class="mt-4 info-links">
+                {% if privacy_policy_url %}
+                    <a href="{{ privacy_policy_url }}" target="_blank">Privacy Policy</a>
+                {% endif %}
+                {% if terms_of_service_url %}
+                    <a href="{{ terms_of_service_url }}" target="_blank">Terms of Service</a>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
 </body>
 </html>

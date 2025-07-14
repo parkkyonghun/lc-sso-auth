@@ -3,9 +3,9 @@ Forms module for Flask Admin Panel
 """
 
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, BooleanField, TextAreaField, SelectField, SubmitField
+from wtforms import StringField, PasswordField, BooleanField, TextAreaField, SelectField, SubmitField, IntegerField
 from wtforms.validators import DataRequired, Email, Length, Optional as OptionalValidator
-from wtforms.widgets import TextArea
+
 
 
 class LoginForm(FlaskForm):
@@ -57,8 +57,8 @@ class ApplicationForm(FlaskForm):
     response_types = TextAreaField('Response Types (one per line)', validators=[OptionalValidator()])
     
     # Token settings
-    access_token_lifetime = StringField('Access Token Lifetime (minutes)', validators=[OptionalValidator()])
-    refresh_token_lifetime = StringField('Refresh Token Lifetime (days)', validators=[OptionalValidator()])
+    access_token_lifetime = IntegerField('Access Token Lifetime (minutes)', validators=[OptionalValidator()])
+    refresh_token_lifetime = IntegerField('Refresh Token Lifetime (days)', validators=[OptionalValidator()])
     token_endpoint_auth_method = SelectField(
         'Token Endpoint Auth Method',
         choices=[

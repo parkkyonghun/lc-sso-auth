@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Response, Form
-from fastapi.responses import RedirectResponse, JSONResponse
+import os
+from pathlib import Path
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Form
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -7,13 +9,11 @@ from urllib.parse import urlencode
 
 from ..core.database import get_db
 from ..core.security import check_rate_limit
-from ..schemas.application import AuthorizeRequest, TokenRequest, TokenResponse, ConsentRequest
+from ..schemas.application import AuthorizeRequest, TokenRequest, TokenResponse
 from ..services.oauth_service import OAuthService
 from .auth import get_current_user
 
 router = APIRouter(tags=["OAuth 2.0"])
-import os
-from pathlib import Path
 
 # Get the absolute path to the templates directory
 templates_dir = os.path.join(Path(__file__).parent.parent, "templates")
@@ -61,7 +61,7 @@ async def authorize(
         
         if result["action"] == "login_required":
             # Redirect to login with current URL as next parameter
-            login_url = f"/auth/login?next={request.url}"
+            login_url = f"/auth/login?{urlencode({'next': str(request.url)})}"
             return RedirectResponse(url=login_url, status_code=302)
         
         elif result["action"] == "consent_required":

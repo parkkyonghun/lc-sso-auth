@@ -8,20 +8,12 @@ This script will:
 """
 
 import sys
-import os
-from pathlib import Path
-
-# Add the project root to Python path
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
 
 from sqlalchemy.orm import Session
 from app.core.database import engine, SessionLocal
 from app.models.user import User
 from app.models.role import Role
 from app.models.permission import Permission
-from app.models.user_role import user_roles
-from app.models.role_permission import role_permissions
 from sqlalchemy import text
 
 def run_migration():

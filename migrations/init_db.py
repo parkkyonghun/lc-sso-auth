@@ -6,18 +6,12 @@ creates a default admin user and sample OAuth application.
 """
 
 import sys
-import os
-from pathlib import Path
-
-# Add the project root to Python path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 from app.core.database import Base
-from app.models import User, Role, Employee, Branch, Department, Position, user_roles
+
 from app.services.user_service import UserService
 from app.schemas.user import UserCreate
 
@@ -60,9 +54,9 @@ def create_admin_user(db_session):
     
     print("✓ Admin user created successfully")
 
-    print(f"  Username: admin")
-    print(f"  Email: admin@example.com")
-    print(f"  Password: Admin123!")
+    print("   Username: admin")
+    print("   Email: admin@example.com")
+    print("   Password: Admin123!")
     print(f"  User ID: {admin_user.id}")
     
     return admin_user
@@ -85,7 +79,7 @@ def main():
         
         try:
             # Create admin user
-            admin_user = create_admin_user(db)
+            create_admin_user(db)
 
             # Commit all changes
             db.commit()

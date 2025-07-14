@@ -10,7 +10,7 @@ This script fixes the database connection issue by:
 """
 
 import sys
-import os
+
 from pathlib import Path
 
 # Add the project root to Python path
@@ -92,7 +92,7 @@ def create_quick_admin():
             
             print("✅ Created admin user:")
             print("   Username: admin")
-            print("   Password: admin123")
+            print("   Password: Admin123!")
             print("   Email: admin@example.com")
             return True
             
@@ -144,9 +144,6 @@ def main():
     print("=" * 50)
     
     success_count = 0
-    total_steps = 3
-    
-    # Step 1: Fix database
     if fix_database():
         success_count += 1
     
@@ -159,7 +156,6 @@ def main():
         success_count += 1
     else:
         print("ℹ️  Health test skipped (server not running)")
-        success_count += 1  # Don't fail for this
     
     print("\n" + "=" * 50)
     if success_count >= 2:  # At least database and admin creation

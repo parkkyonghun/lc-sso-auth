@@ -3,13 +3,9 @@ User management routes for Flask Admin Panel
 """
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from auth import login_required, super_admin_required
-from api_client import api_client, handle_api_error, get_branches, get_departments, get_positions
-from forms import UserForm
+from flask_admin.auth import login_required, super_admin_required
+from flask_admin.api_client import api_client, get_branches, get_departments, get_positions
+from flask_admin.forms import UserForm
 
 users_bp = Blueprint('users', __name__, url_prefix='/users')
 

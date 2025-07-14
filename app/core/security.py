@@ -5,9 +5,7 @@ from typing import Optional, Dict, Any
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 from fastapi import HTTPException, status
-import secrets
-import string
-import hashlib
+
 from .config import settings
 from .cache import get_cache
 
@@ -61,7 +59,7 @@ def create_access_token(user_id: str, scope: str = "openid profile email") -> st
         "scope": scope,
         "token_type": "access_token"
     }
-    return create_jwt(payload)
+    return create_jwt(payload, exp_min=settings.jwt_access_token_expire_minutes)
 
 def create_id_token(user_data: Dict[str, Any]) -> str:
     """Create an ID token with user information"""
@@ -72,7 +70,7 @@ def create_id_token(user_data: Dict[str, Any]) -> str:
         "username": user_data.get("username"),
         "token_type": "id_token"
     }
-    return create_jwt(payload)
+    return create_jwt(payload, exp_min=settings.jwt_id_token_expire_minutes)
 
 def create_session(user_id: str) -> str:
     """Create a user session and store it in cache"""

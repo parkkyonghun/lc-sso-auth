@@ -9,6 +9,7 @@ The admin system provides a complete set of tools for managing users, applicatio
 - **Dashboard & Analytics**: System statistics, user metrics, and activity monitoring
 - **User Management**: Create, update, delete, search, and manage user accounts
 - **Application Management**: Oversee OAuth applications and their configurations
+- **Organization Management**: Complete management of branches, departments, and positions
 - **Security Features**: Account unlocking, bulk operations, and access control
 
 ## Getting Started
@@ -320,6 +321,195 @@ Check application logs for detailed error information:
 ```bash
 tail -f logs/app.log
 ```
+
+## Organization Management
+
+The admin system provides comprehensive organization structure management through branches, departments, and positions.
+
+### Branches
+
+Branches represent physical locations or regional offices of the organization.
+
+#### Get All Branches
+```http
+GET /api/admin/branches
+```
+Returns a list of all branches in the organization.
+
+**Response Example:**
+```json
+[
+  {
+    "id": "8f6b0538-501d-42ac-be77-ab3ccfc40194",
+    "branch_name": "Main Branch",
+    "branch_code": "MB001",
+    "address": "123 Main St",
+    "province": "Phnom Penh"
+  }
+]
+```
+
+#### Create Branch
+```http
+POST /api/admin/branches
+```
+
+**Request Body:**
+```json
+{
+  "name": "New Branch",
+  "code": "NB001",
+  "address": "456 New Street",
+  "province": "Siem Reap"
+}
+```
+
+**Response:** Returns the created branch object with generated ID.
+
+#### Update Branch
+```http
+PUT /api/admin/branches/{branch_id}
+```
+
+**Request Body (all fields optional):**
+```json
+{
+  "name": "Updated Branch Name",
+  "code": "UB001",
+  "address": "789 Updated Street",
+  "province": "Battambang"
+}
+```
+
+#### Delete Branch
+```http
+DELETE /api/admin/branches/{branch_id}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Branch deleted successfully"
+}
+```
+
+### Departments
+
+Departments represent functional divisions within the organization.
+
+#### Get All Departments
+```http
+GET /api/admin/departments
+```
+
+#### Create Department
+```http
+POST /api/admin/departments
+```
+
+**Request Body:**
+```json
+{
+  "name": "Information Technology",
+  "description": "Manages all IT infrastructure and software development"
+}
+```
+
+#### Update Department
+```http
+PUT /api/admin/departments/{department_id}
+```
+
+**Request Body (all fields optional):**
+```json
+{
+  "name": "Updated Department Name",
+  "description": "Updated description"
+}
+```
+
+#### Delete Department
+```http
+DELETE /api/admin/departments/{department_id}
+```
+
+### Positions
+
+Positions represent job roles within departments.
+
+#### Get All Positions
+```http
+GET /api/admin/positions
+```
+
+**Response Example:**
+```json
+[
+  {
+    "id": "36eb94e5-9f57-45fc-9d80-233d3f1a5119",
+    "title": "Software Engineer",
+    "department_id": "f2e447c5-5805-489c-8abb-af1c414d0cf2",
+    "department_name": "IT"
+  }
+]
+```
+
+#### Create Position
+```http
+POST /api/admin/positions
+```
+
+**Request Body:**
+```json
+{
+  "title": "Senior Developer",
+  "department_id": "f2e447c5-5805-489c-8abb-af1c414d0cf2"
+}
+```
+
+#### Update Position
+```http
+PUT /api/admin/positions/{position_id}
+```
+
+#### Delete Position
+```http
+DELETE /api/admin/positions/{position_id}
+```
+
+### Organization Schema Details
+
+#### BranchResponse Schema
+- `id` (string): Unique branch identifier
+- `branch_name` (string): Branch name
+- `branch_code` (string): Unique branch code
+- `address` (string, optional): Branch address
+- `province` (string, optional): Province/state
+
+#### DepartmentResponse Schema
+- `id` (string): Unique department identifier
+- `department_name` (string): Department name
+- `description` (string, optional): Department description
+
+#### PositionResponse Schema
+- `id` (string): Unique position identifier
+- `title` (string): Position title
+- `department_id` (string): Associated department ID
+- `department_name` (string, optional): Department name (populated from relationship)
+
+### Important Notes
+
+1. **UUID Conversion**: All entity IDs are automatically converted from UUID objects to strings in API responses.
+
+2. **Admin Access Required**: All organization management endpoints require admin privileges (`is_superuser=True`).
+
+3. **Cascading Effects**:
+   - Deleting a department may affect positions within that department
+   - Deleting a branch may affect users assigned to that branch
+   - Consider these relationships before deletion
+
+4. **Validation**: All request data is validated using Pydantic schemas with appropriate field constraints.
 
 ## Support
 

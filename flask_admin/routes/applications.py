@@ -2,13 +2,9 @@
 Application management routes for Flask Admin Panel
 """
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from auth import login_required
-from api_client import api_client, handle_api_error
+from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask_admin.auth import login_required
+from flask_admin.api_client import api_client
 
 applications_bp = Blueprint('applications', __name__, url_prefix='/applications')
 

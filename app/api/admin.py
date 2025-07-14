@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
-from ..core.auth import get_current_user
+from ..api.auth import require_auth
 from ..models.user import User
 from ..models.branch import Branch
 from ..models.department import Department
@@ -15,24 +15,30 @@ from ..schemas.admin import (
     ActivityResponse, AdminDashboardResponse, UserDetailResponse,
     ApplicationDetailResponse, BulkUserAction, BulkApplicationAction,
     AdminActionResponse, RoleResponse, PermissionResponse, RoleCreateRequest,
-    PermissionCreateRequest, RoleUpdateRequest, PermissionUpdateRequest
+    PermissionCreateRequest, RoleUpdateRequest
 )
-from ..schemas.organization import BranchResponse, DepartmentResponse, PositionResponse
+from ..schemas.organization import (
+    BranchResponse, DepartmentResponse, PositionResponse,
+    BranchCreateRequest, BranchUpdateRequest,
+    DepartmentCreateRequest, DepartmentUpdateRequest,
+    PositionCreateRequest, PositionUpdateRequest,
+    OrganizationDeleteResponse
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 @router.get("/dashboard", response_model=AdminDashboardResponse)
 async def get_admin_dashboard(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Get complete admin dashboard data"""
     admin_service = AdminService(db)
-    
+
     system_stats = admin_service.get_system_stats(str(current_user.id))
     user_stats = admin_service.get_user_stats(str(current_user.id))
     recent_activities = admin_service.get_recent_activities(str(current_user.id), limit=20)
-    
+
     return AdminDashboardResponse(
         system_stats=system_stats,
         user_stats=user_stats,
@@ -41,7 +47,7 @@ async def get_admin_dashboard(
 
 @router.get("/stats/system", response_model=SystemStatsResponse)
 async def get_system_stats(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Get system-wide statistics"""
@@ -50,7 +56,7 @@ async def get_system_stats(
 
 @router.get("/stats/users", response_model=UserStatsResponse)
 async def get_user_stats(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Get detailed user statistics"""
@@ -59,7 +65,7 @@ async def get_user_stats(
 
 @router.get("/stats")
 async def get_admin_stats(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Get admin statistics for dashboard (simplified endpoint for Flask admin)"""
@@ -79,7 +85,7 @@ async def get_admin_stats(
 @router.get("/activities", response_model=ActivityResponse)
 async def get_recent_activities(
     limit: int = Query(50, ge=1, le=100),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Get recent system activities"""
@@ -93,7 +99,7 @@ async def search_users(
     q: Optional[str] = Query(None, description="Search query"),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Search users with pagination"""
@@ -125,7 +131,7 @@ async def search_users(
 @router.get("/users/{user_id}", response_model=UserDetailResponse)
 async def get_user_detail(
     user_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Get detailed user information"""
@@ -148,35 +154,35 @@ async def get_user_detail(
             detail={"error": "user_not_found", "detail": "User not found"}
         )
     
-    return UserDetailResponse.from_orm(user)
+    return UserDetailResponse.model_validate(user)
 
 @router.post("/users", response_model=UserDetailResponse)
 async def create_user(
     user_data: AdminUserCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Create a new user (admin only)"""
     admin_service = AdminService(db)
     user = admin_service.create_user_as_admin(str(current_user.id), user_data)
-    return UserDetailResponse.from_orm(user)
+    return UserDetailResponse.model_validate(user)
 
 @router.put("/users/{user_id}", response_model=UserDetailResponse)
 async def update_user(
     user_id: str,
     user_data: AdminUserUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Update user (admin only)"""
     admin_service = AdminService(db)
     user = admin_service.update_user_as_admin(str(current_user.id), user_id, user_data)
-    return UserDetailResponse.from_orm(user)
+    return UserDetailResponse.model_validate(user)
 
 @router.delete("/users/{user_id}", response_model=AdminActionResponse)
 async def delete_user(
     user_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Delete user (admin only)"""
@@ -197,7 +203,7 @@ async def delete_user(
 @router.post("/users/{user_id}/unlock", response_model=AdminActionResponse)
 async def unlock_user(
     user_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Unlock user account"""
@@ -216,30 +222,11 @@ async def unlock_user(
         )
 
 # Role and Permission Management Endpoints
-@router.get("/roles", response_model=List[RoleResponse])
-async def get_all_roles(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get all available roles"""
-    admin_service = AdminService(db)
-    roles_data = admin_service.get_all_roles(str(current_user.id))
-    return [RoleResponse(**role) for role in roles_data]
-
-@router.get("/permissions", response_model=List[PermissionResponse])
-async def get_all_permissions(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get all available permissions"""
-    admin_service = AdminService(db)
-    permissions_data = admin_service.get_all_permissions(str(current_user.id))
-    return [PermissionResponse(**perm) for perm in permissions_data]
 
 @router.get("/users/{user_id}/roles")
 async def get_user_roles(
     user_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Get roles assigned to a user"""
@@ -250,7 +237,7 @@ async def get_user_roles(
 @router.get("/users/{user_id}/permissions")
 async def get_user_permissions(
     user_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Get permissions for a user"""
@@ -262,7 +249,7 @@ async def get_user_permissions(
 async def assign_role_to_user(
     user_id: str,
     role_name: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Assign a role to a user"""
@@ -284,7 +271,7 @@ async def assign_role_to_user(
 async def remove_role_from_user(
     user_id: str,
     role_name: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Remove a role from a user"""
@@ -305,7 +292,7 @@ async def remove_role_from_user(
 @router.post("/users/bulk-action", response_model=AdminActionResponse)
 async def bulk_user_action(
     action_data: BulkUserAction,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Perform bulk actions on users"""
@@ -347,7 +334,7 @@ async def bulk_user_action(
 async def get_all_applications(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Get all applications (admin view)"""
@@ -376,7 +363,7 @@ async def get_all_applications(
 @router.get("/applications/{app_id}", response_model=ApplicationDetailResponse)
 async def get_application_detail(
     app_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Get detailed application information"""
@@ -390,24 +377,24 @@ async def get_application_detail(
             detail={"error": "application_not_found", "detail": "Application not found"}
         )
     
-    return ApplicationDetailResponse.from_orm(app)
+    return ApplicationDetailResponse.model_validate(app)
 
 @router.put("/applications/{app_id}", response_model=ApplicationDetailResponse)
 async def update_application(
     app_id: str,
     app_data: AdminApplicationUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Update application (admin only)"""
     admin_service = AdminService(db)
     app = admin_service.update_application_as_admin(str(current_user.id), app_id, app_data)
-    return ApplicationDetailResponse.from_orm(app)
+    return ApplicationDetailResponse.model_validate(app)
 
 @router.delete("/applications/{app_id}", response_model=AdminActionResponse)
 async def delete_application(
     app_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Delete application (admin only)"""
@@ -428,7 +415,7 @@ async def delete_application(
 @router.post("/applications/bulk-action", response_model=AdminActionResponse)
 async def bulk_application_action(
     action_data: BulkApplicationAction,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Perform bulk actions on applications"""
@@ -464,7 +451,7 @@ async def bulk_application_action(
 # Role Management Endpoints
 @router.get("/roles", response_model=List[RoleResponse])
 async def get_all_roles(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Get all roles"""
@@ -482,7 +469,7 @@ async def get_all_roles(
 @router.post("/roles", response_model=RoleResponse)
 async def create_role(
     role_data: RoleCreateRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Create a new role"""
@@ -501,7 +488,7 @@ async def create_role(
 async def update_role(
     role_id: str,
     role_data: RoleUpdateRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Update a role"""
@@ -522,7 +509,7 @@ async def update_role(
 @router.delete("/roles/{role_id}", response_model=AdminActionResponse)
 async def delete_role(
     role_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Delete a role"""
@@ -538,7 +525,7 @@ async def delete_role(
 # Permission Management Endpoints
 @router.get("/permissions", response_model=List[PermissionResponse])
 async def get_all_permissions(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Get all permissions"""
@@ -555,7 +542,7 @@ async def get_all_permissions(
 @router.post("/permissions", response_model=PermissionResponse)
 async def create_permission(
     permission_data: PermissionCreateRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Create a new permission"""
@@ -575,7 +562,7 @@ async def create_permission(
 @router.delete("/permissions/{permission_id}", response_model=AdminActionResponse)
 async def delete_permission(
     permission_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Delete a permission"""
@@ -591,159 +578,247 @@ async def delete_permission(
 # Organization Structure Endpoints
 @router.get("/branches", response_model=List[BranchResponse])
 async def get_all_branches(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
-    """Get all branches"""
+    """
+    Get all branches
+
+    Returns a list of all branches in the organization.
+    Requires admin privileges.
+    """
     admin_service = AdminService(db)
     admin_service.verify_admin_access(str(current_user.id))
 
     branches = db.query(Branch).all()
-    return [BranchResponse.from_orm(branch) for branch in branches]
+    
+    # Manual conversion to ensure UUID is properly converted to string
+    return [
+        BranchResponse(
+            id=str(branch.id),
+            branch_name=branch.branch_name,
+            branch_code=branch.branch_code,
+            address=branch.address,
+            province=branch.province
+        ) for branch in branches
+    ]
 
 @router.post("/branches", response_model=BranchResponse)
 async def create_branch(
-    branch_data: dict,
-    current_user: User = Depends(get_current_user),
+    branch_data: BranchCreateRequest,
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
-    """Create a new branch"""
+    """
+    Create a new branch
+
+    Creates a new branch with the provided information.
+    Requires admin privileges.
+
+    - **name**: Branch name (required)
+    - **code**: Unique branch code (required)
+    - **address**: Branch address (optional)
+    - **province**: Province/state (optional)
+    """
     admin_service = AdminService(db)
     admin_service.verify_admin_access(str(current_user.id))
 
     branch = Branch(
-        branch_name=branch_data["name"],
-        branch_code=branch_data.get("code", ""),
-        address=branch_data.get("address", ""),
-        province=branch_data.get("province", "")
+        branch_name=branch_data.name,
+        branch_code=branch_data.code,
+        address=branch_data.address,
+        province=branch_data.province
     )
     db.add(branch)
     db.commit()
     db.refresh(branch)
-    return BranchResponse.from_orm(branch)
+    return BranchResponse.model_validate(branch)
 
 @router.put("/branches/{branch_id}", response_model=BranchResponse)
 async def update_branch(
     branch_id: str,
-    branch_data: dict,
-    current_user: User = Depends(get_current_user),
+    branch_data: BranchUpdateRequest,
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
-    """Update a branch"""
+    """
+    Update a branch
+
+    Updates an existing branch with the provided information.
+    Only provided fields will be updated.
+    Requires admin privileges.
+
+    - **name**: Branch name (optional)
+    - **code**: Unique branch code (optional)
+    - **address**: Branch address (optional)
+    - **province**: Province/state (optional)
+    """
     admin_service = AdminService(db)
     admin_service.verify_admin_access(str(current_user.id))
 
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
-    
-    if "name" in branch_data:
-        branch.branch_name = branch_data["name"]
-    if "code" in branch_data:
-        branch.branch_code = branch_data["code"]
-    if "address" in branch_data:
-        branch.address = branch_data["address"]
-    if "province" in branch_data:
-        branch.province = branch_data["province"]
-    
+
+    if branch_data.name is not None:
+        branch.branch_name = branch_data.name
+    if branch_data.code is not None:
+        branch.branch_code = branch_data.code
+    if branch_data.address is not None:
+        branch.address = branch_data.address
+    if branch_data.province is not None:
+        branch.province = branch_data.province
+
     db.commit()
     db.refresh(branch)
-    return BranchResponse.from_orm(branch)
+    return BranchResponse.model_validate(branch)
 
-@router.delete("/branches/{branch_id}")
+@router.delete("/branches/{branch_id}", response_model=OrganizationDeleteResponse)
 async def delete_branch(
     branch_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
-    """Delete a branch"""
+    """
+    Delete a branch
+
+    Permanently deletes a branch from the system.
+    This action cannot be undone.
+    Requires admin privileges.
+
+    **Warning**: Deleting a branch may affect users assigned to this branch.
+    """
     admin_service = AdminService(db)
     admin_service.verify_admin_access(str(current_user.id))
 
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
-    
+
     db.delete(branch)
     db.commit()
-    return {"success": True, "message": "Branch deleted successfully"}
+    return OrganizationDeleteResponse(
+        success=True,
+        message="Branch deleted successfully"
+    )
 
 @router.get("/departments", response_model=List[DepartmentResponse])
 async def get_all_departments(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
-    """Get all departments"""
+    """
+    Get all departments
+
+    Returns a list of all departments in the organization.
+    Requires admin privileges.
+    """
     admin_service = AdminService(db)
     admin_service.verify_admin_access(str(current_user.id))
 
     departments = db.query(Department).all()
-    return [DepartmentResponse.from_orm(dept) for dept in departments]
+    
+    # Manual conversion to ensure UUID is properly converted to string
+    return [
+        DepartmentResponse(
+            id=str(dept.id),
+            department_name=dept.department_name,
+            description=dept.description
+        ) for dept in departments
+    ]
 
 @router.post("/departments", response_model=DepartmentResponse)
 async def create_department(
-    department_data: dict,
-    current_user: User = Depends(get_current_user),
+    department_data: DepartmentCreateRequest,
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
-    """Create a new department"""
+    """
+    Create a new department
+
+    Creates a new department with the provided information.
+    Requires admin privileges.
+
+    - **name**: Department name (required)
+    - **description**: Department description (optional)
+    """
     admin_service = AdminService(db)
     admin_service.verify_admin_access(str(current_user.id))
 
     department = Department(
-        department_name=department_data["name"],
-        description=department_data.get("description", "")
+        department_name=department_data.name,
+        description=department_data.description
     )
     db.add(department)
     db.commit()
     db.refresh(department)
-    return DepartmentResponse.from_orm(department)
+    return DepartmentResponse.model_validate(department)
 
 @router.put("/departments/{department_id}", response_model=DepartmentResponse)
 async def update_department(
     department_id: str,
-    department_data: dict,
-    current_user: User = Depends(get_current_user),
+    department_data: DepartmentUpdateRequest,
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
-    """Update a department"""
+    """
+    Update a department
+
+    Updates an existing department with the provided information.
+    Only provided fields will be updated.
+    Requires admin privileges.
+
+    - **name**: Department name (optional)
+    - **description**: Department description (optional)
+    """
     admin_service = AdminService(db)
     admin_service.verify_admin_access(str(current_user.id))
 
     department = db.query(Department).filter(Department.id == department_id).first()
     if not department:
         raise HTTPException(status_code=404, detail="Department not found")
-    
-    if "name" in department_data:
-        department.department_name = department_data["name"]
-    if "description" in department_data:
-        department.description = department_data["description"]
-    
+
+    if department_data.name is not None:
+        department.department_name = department_data.name
+    if department_data.description is not None:
+        department.description = department_data.description
+
     db.commit()
     db.refresh(department)
-    return DepartmentResponse.from_orm(department)
+    return DepartmentResponse.model_validate(department)
 
-@router.delete("/departments/{department_id}")
+@router.delete("/departments/{department_id}", response_model=OrganizationDeleteResponse)
 async def delete_department(
     department_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
-    """Delete a department"""
+    """
+    Delete a department
+
+    Permanently deletes a department from the system.
+    This action cannot be undone.
+    Requires admin privileges.
+
+    **Warning**: Deleting a department may affect positions and users assigned to this department.
+    """
     admin_service = AdminService(db)
     admin_service.verify_admin_access(str(current_user.id))
 
     department = db.query(Department).filter(Department.id == department_id).first()
     if not department:
         raise HTTPException(status_code=404, detail="Department not found")
-    
+
     db.delete(department)
     db.commit()
-    return {"success": True, "message": "Department deleted successfully"}
+    return OrganizationDeleteResponse(
+        success=True,
+        message="Department deleted successfully"
+    )
 
 @router.get("/positions", response_model=List[PositionResponse])
 async def get_all_positions(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Get all positions"""
@@ -751,12 +826,21 @@ async def get_all_positions(
     admin_service.verify_admin_access(str(current_user.id))
 
     positions = db.query(Position).all()
-    return [PositionResponse.from_orm(pos) for pos in positions]
+    
+    # Manual conversion to ensure UUID is properly converted to string
+    return [
+        PositionResponse(
+            id=str(pos.id),
+            title=pos.title,
+            department_id=str(pos.department_id) if pos.department_id else None,
+            department_name=pos.department.department_name if pos.department else None
+        ) for pos in positions
+    ]
 
 @router.post("/positions", response_model=PositionResponse)
 async def create_position(
     position_data: dict,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Create a new position"""
@@ -770,13 +854,13 @@ async def create_position(
     db.add(position)
     db.commit()
     db.refresh(position)
-    return PositionResponse.from_orm(position)
+    return PositionResponse.model_validate(position)
 
 @router.put("/positions/{position_id}", response_model=PositionResponse)
 async def update_position(
     position_id: str,
     position_data: dict,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Update a position"""
@@ -794,12 +878,12 @@ async def update_position(
     
     db.commit()
     db.refresh(position)
-    return PositionResponse.from_orm(position)
+    return PositionResponse.model_validate(position)
 
 @router.delete("/positions/{position_id}")
 async def delete_position(
     position_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Delete a position"""

@@ -28,6 +28,7 @@ class User(Base):
     timezone = Column(String(50), nullable=True)
     language = Column(String(10), nullable=True)
     manager_name = Column(String(255), nullable=True)
+    phone_number = Column(String(20), nullable=True)
     
     # Organization fields
     branch_id = Column(UUID(as_uuid=True), ForeignKey("branches.id", ondelete="SET NULL"), nullable=True)
@@ -36,7 +37,7 @@ class User(Base):
 
     employee = relationship("Employee", back_populates="user", uselist=False)
     roles = relationship("Role", secondary="user_roles", back_populates="users")
-    oauth_applications = relationship("OAuthApplication", back_populates="creator")
+    oauth_applications = relationship("Application", back_populates="creator")
     
     # Organization relationships
     branch = relationship("Branch", foreign_keys=[branch_id])

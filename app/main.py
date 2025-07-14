@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException
+import os
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from fastapi.responses import JSONResponse
 import logging
 import time
@@ -73,11 +73,12 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # Mount static files
-try:
-    app.mount("/static", StaticFiles(directory="static"), name="static")
-except RuntimeError:
-    # Static directory doesn't exist, create it or skip mounting
-    logger.warning("Static directory not found, skipping static file mounting")
+# Mount static files
+static_dir = "static"
+if os.path.exists(static_dir) and os.path.isdir(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+else:
+    logger.warning(f"Static directory '{static_dir}' not found, skipping static file mounting")
 
 # Include routers
 app.include_router(auth_router, prefix="/auth")

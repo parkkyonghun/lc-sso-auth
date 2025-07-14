@@ -1,8 +1,7 @@
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..models.user import User
 from ..models.application import Application
 from ..schemas.application import AuthorizeRequest, TokenRequest, TokenResponse
 from ..core.security import (
@@ -53,7 +52,7 @@ class OAuthService:
         if not user_id:
             return {
                 "action": "login_required",
-                "login_url": f"/login?next=/authorize",
+                "login_url": "/login?next=/authorize",
                 "client_name": app.name
             }
         
@@ -336,7 +335,7 @@ class OAuthService:
             
             return user_info
         
-        except Exception as e:
+        except Exception:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid access token"

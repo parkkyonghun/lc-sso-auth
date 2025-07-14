@@ -3,13 +3,9 @@ Main routes for Flask Admin Panel
 """
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from auth import login_required
-from api_client import api_client, handle_api_error
-from forms import LoginForm
+from flask_admin.auth import login_required
+from flask_admin.api_client import api_client
+from flask_admin.forms import LoginForm
 
 main_bp = Blueprint('main', __name__)
 
@@ -145,18 +141,14 @@ def health_check():
     """Proxy health check to backend"""
     try:
         import requests
-        from config import Config
+        from flask_admin.config import Config
         response = requests.get(f"{Config.FASTAPI_BASE_URL}/health", timeout=5)
         return response.json()
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}, 500
 
 
-# Health check endpoint (Docker)
-@main_bp.route('/health')
-def health_check_docker():
-    """Health check endpoint for Docker"""
-    return {'status': 'healthy', 'service': 'flask-admin'}, 200
+
 
 
 # Error handlers

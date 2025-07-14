@@ -9,7 +9,8 @@ class UserBase(BaseModel):
     full_name: Optional[str] = Field(None, max_length=255, description="Full name")
     phone_number: Optional[str] = Field(None, max_length=20, description="Phone number")
     bio: Optional[str] = Field(None, max_length=500, description="User biography")
-
+    is_superuser: bool = Field(False, description="Superuser status")
+ 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8, max_length=128, description="Password")
     
@@ -30,7 +31,8 @@ class UserUpdate(BaseModel):
     phone_number: Optional[str] = Field(None, max_length=20)
     bio: Optional[str] = Field(None, max_length=500)
     profile_picture: Optional[str] = Field(None, description="Profile picture URL")
-
+    is_superuser: Optional[bool] = Field(None, description="Superuser status")
+ 
 class UserLogin(BaseModel):
     username: str = Field(..., description="Username or email")
     password: str = Field(..., description="Password")
@@ -38,6 +40,7 @@ class UserLogin(BaseModel):
 class UserResponse(UserBase):
     id: uuid.UUID
     username: str
+    email: EmailStr
     is_active: bool
     created_at: datetime
     last_login: Optional[datetime] = None

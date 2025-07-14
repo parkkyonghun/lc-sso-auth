@@ -1,12 +1,10 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
 from ..models.user import User
 from ..models.role import Role
 from ..models.permission import Permission
-from ..models.user_role import user_roles
-from ..models.role_permission import role_permissions
 
 
 class PermissionService:

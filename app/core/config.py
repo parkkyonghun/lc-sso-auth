@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     secret_key: str = "your-secret-key-here"
     
     # Database
-    database_url: str = "sqlite:///./sso.db"
+    database_url: str = "postgresql://postgres:123456@localhost:5432/ssodb"
     
     # Cache
     cache_url: str = "redis://localhost:6379"
@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     
     # CORS Settings
     allowed_origins: List[str] = ["http://localhost:3000", "http://localhost:8080"]
-    allowed_hosts: str = "http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000"
+    allowed_hosts: List[str] = []
     
     # Session Configuration
     session_expire_minutes: int = 60
@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        if not self.allowed_hosts:
+            self.allowed_hosts = ["http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:3000"]
         # Load RSA keys from files
         import os
         # Get the absolute path to the project's root directory

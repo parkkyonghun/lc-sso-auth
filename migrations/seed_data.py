@@ -4,11 +4,15 @@ import os
 # Add project root to Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal, engine, Base
-from app.models import *
+from app.models.application import Application
+from app.models.role import Role
 from app.models.permission import Permission
-from app.models.oauth_application import OAuthApplication
+from app.models.branch import Branch
+from app.models.department import Department
+from app.models.position import Position
 
 def seed_data():
     # Create tables
@@ -54,7 +58,7 @@ def seed_data():
         from app.core.security import hash_password
         from app.models.user import User
         from app.models.employee import Employee
-        import uuid
+        
 
         if not db.query(User).filter_by(username="admin").first():
             hashed_password = hash_password("password")
@@ -119,11 +123,11 @@ def seed_data():
             db.commit()
 
         # Add OAuth Application
-        if not db.query(OAuthApplication).first():
+        if not db.query(Application).first():
             import secrets
             user = db.query(User).filter_by(username="admin").first()
             if user:
-                oauth_app = OAuthApplication(
+                oauth_app = Application(
                     name="My Awesome App",
                     description="An awesome application.",
                     client_id=secrets.token_urlsafe(16),

@@ -4,7 +4,7 @@ API Client for communicating with FastAPI backend
 
 import requests
 from typing import Dict, Any, Optional
-from config import Config
+from flask_admin.config import Config
 
 
 class FastAPIClient:
@@ -126,13 +126,4 @@ def get_positions():
     return result
 
 
-def handle_api_error(result: Dict[str, Any], error_message: str = "API Error") -> bool:
-    """
-    Handle API errors consistently across the application.
-    Returns True if there was an error, False otherwise.
-    """
-    if 'error' in result:
-        from flask import flash
-        flash(f"{error_message}: {result['error']}", 'danger')
-        return True
-    return False
+

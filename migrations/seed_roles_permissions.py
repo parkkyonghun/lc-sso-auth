@@ -6,7 +6,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal, engine, Base
-from app.models import *
 from app.models.permission import Permission
 from app.models.role import Role
 from app.models.user import User

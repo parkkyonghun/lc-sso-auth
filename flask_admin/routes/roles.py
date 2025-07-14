@@ -3,14 +3,9 @@ Roles and permissions management routes for Flask Admin Panel
 """
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from auth import login_required, super_admin_required
-from api_client import api_client, handle_api_error
-from config import ROLES, PERMISSIONS
-from forms import PermissionForm
+from flask_admin.auth import login_required, super_admin_required
+from flask_admin.api_client import api_client
+from flask_admin.forms import PermissionForm
 
 roles_bp = Blueprint('roles', __name__)
 

@@ -27,26 +27,48 @@ async def create_application(
 
 @router.get("/", response_model=ApplicationList)
 async def list_applications(
-    skip: int = Query(0, ge=0, description="Number of applications to skip"),
-    limit: int = Query(10, ge=1, le=100, description="Number of applications to return"),
+    page: int = Query(1, ge=1, description="Page number"),
+    size: int = Query(10, ge=1, le=100, description="Number of applications per page"),
     search: Optional[str] = Query(None, description="Search applications by name or description"),
     current_user_id: str = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """List user's OAuth applications"""
     app_service = ApplicationService(db)
-    applications, total = app_service.list_applications(
-        user_id=current_user_id,
-        skip=skip,
-        limit=limit,
-        search=search
-    )
-    
+    skip = (page - 1) * size
+
+    if search:
+        # Use general search method with user filter
+        applications, total = app_service.get_applications(skip=skip, limit=size, search=search)
+        # Filter by user
+        user_applications = [app for app in applications if app.created_by == current_user_id]
+        # Recalculate total for user's applications only
+        from sqlalchemy import and_
+        from ..models.application import Application
+        total_query = app_service.db.query(Application).filter(
+            and_(
+                Application.created_by == current_user_id,
+                Application.name.ilike(f"%{search}%")
+            )
+        )
+        total = total_query.count()
+        applications = user_applications
+    else:
+        # Use user-specific method
+        applications, total = app_service.get_applications_by_user(
+            user_id=current_user_id,
+            skip=skip,
+            limit=size
+        )
+
+    pages = (total + size - 1) // size  # Calculate total pages
+
     return ApplicationList(
         applications=applications,
         total=total,
-        skip=skip,
-        limit=limit
+        page=page,
+        size=size,
+        pages=pages
     )
 
 @router.get("/{application_id}", response_model=ApplicationResponse)
@@ -66,7 +88,7 @@ async def get_application(
         )
     
     # Check if user owns this application
-    if application.owner_id != current_user_id:
+    if application.created_by != current_user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"error": "forbidden", "detail": "You don't have permission to access this application"}
@@ -92,7 +114,7 @@ async def update_application(
             detail="Application not found"
         )
     
-    if application.owner_id != current_user_id:
+    if application.created_by != current_user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"error": "forbidden", "detail": "You don't have permission to update this application"}
@@ -117,7 +139,7 @@ async def regenerate_client_secret(
             detail="Application not found"
         )
     
-    if application.owner_id != current_user_id:
+    if application.created_by != current_user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"error": "forbidden", "detail": "You don't have permission to regenerate secret for this application"}
@@ -142,7 +164,7 @@ async def activate_application(
             detail="Application not found"
         )
     
-    if application.owner_id != current_user_id:
+    if application.created_by != current_user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to activate this application"
@@ -168,7 +190,7 @@ async def deactivate_application(
             detail="Application not found"
         )
     
-    if application.owner_id != current_user_id:
+    if application.created_by != current_user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"error": "forbidden", "detail": "You don't have permission to deactivate this application"}

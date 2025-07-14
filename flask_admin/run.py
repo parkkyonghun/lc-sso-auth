@@ -4,7 +4,7 @@ Simple startup script for Flask Admin Panel
 """
 
 import argparse
-from main_app import app
+from flask_admin.main_app import app
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Flask Admin Panel for SSO System')

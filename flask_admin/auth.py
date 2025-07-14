@@ -2,14 +2,11 @@
 Authentication utilities for Flask Admin Panel
 """
 
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 from functools import wraps
 from flask import session, redirect, url_for, request, flash
-from config import ROLES
-from app.models.user import User
+
 from app.core.database import get_db
 from app.services.permission_service import PermissionService
 
@@ -66,12 +63,9 @@ def has_permission(user: dict, permission: str) -> bool:
     """Check if user has specific permission"""
     if user.get('is_superuser'):
         return True
-    try:
-        db = next(get_db())
-        permission_service = PermissionService(db)
-        return permission_service.user_has_permission(str(user.get('id')), permission)
-    except Exception:
-        return False
+    
+    user_permissions = user.get('permissions', [])
+    return permission in user_permissions
 
 
 def has_admin_role(user: dict) -> bool:
@@ -88,15 +82,10 @@ def get_user_permissions(user: dict) -> list:
         try:
             db = next(get_db())
             permission_service = PermissionService(db)
-            return permission_service.get_all_permission_codes()
+            return [p.permission_name for p in permission_service.get_all_permissions()]
         except Exception:
             return []
-    try:
-        db = next(get_db())
-        permission_service = PermissionService(db)
-        return permission_service.get_user_permission_codes(str(user.get('id')))
-    except Exception:
-        return []
+    return user.get('permissions', [])
 
 
 def can_access_route(user: dict, route_name: str) -> bool:

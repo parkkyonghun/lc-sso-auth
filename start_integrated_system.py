@@ -39,7 +39,7 @@ class IntegratedSystemManager:
         try:
             response = requests.get(f"http://localhost:{port}/health", timeout=2)
             return response.status_code == 200
-        except:
+        except Exception:
             return False
     
     def wait_for_service(self, port: int, service_name: str, max_wait: int = 30) -> bool:

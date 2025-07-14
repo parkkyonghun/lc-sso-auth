@@ -1,228 +1,173 @@
-import os
-import uuid
-import json
-from datetime import datetime, timedelta, timezone
-from typing import Optional, List
-from fastapi import FastAPI, Request, Depends, Form, HTTPException, status, Response
-from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
-from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, JSON as SAJSON
-from sqlalchemy.orm import relationship
-from jose import jwt
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
+from fastapi.responses import JSONResponse
+import logging
+import time
 import os
+
 from app.core.config import settings
-from app.core.security import create_jwt, decode_jwt, hash_password, verify_password
-from app.core.auth import get_current_user, get_current_admin_user
-from app.services.user_service import UserService
-from app.services.application_service import ApplicationService
-from app.services.auth_service import AuthService
-from app.schemas.user import UserCreate, UserLogin
-from app.schemas.application import ApplicationCreate
-from app.database import get_db, Base, engine
-from app.models.user import User
-from app.models.application import Application
+from app.core.database import create_tables
+from app.core.cache import get_cache
+from app.api import auth_router, oauth_router, applications_router, admin_router
 
-Base.metadata.create_all(bind=engine)
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO if not settings.debug else logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
-templates = Jinja2Templates(directory="templates")
+# Create FastAPI app
+app = FastAPI(
+    title=settings.app_name,
+    description=settings.app_description,
+    version=settings.app_version,
+    debug=settings.debug,
+    docs_url="/docs" if settings.debug else None,
+    redoc_url="/redoc" if settings.debug else None
+)
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-
-app = FastAPI() 
-
-@app.post("/register")
-async def register(
-    username: str = Form(...),
-    password: str = Form(...),
-    email: str = Form(None),
-    full_name: str = Form(None),
-    db=Depends(get_db)
-):
-    user_service = UserService(db)
-    if user_service.get_user_by_username(username):
-        raise HTTPException(status_code=400, detail="Username exists")
-    user_data = UserCreate(
-        username=username,
-        password=password,
-        email=email,
-        full_name=full_name,
-    )
-    user_service.create_user(user_data)
-    return {"msg": "registered"}
-
-@app.post("/login")
-async def login(
-    username: str = Form(...),
-    password: str = Form(...),
-    db=Depends(get_db)
-):
-    auth_service = AuthService(db)
-    user = auth_service.authenticate_user(username, password)
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    sid = auth_service.create_session(user.id)
-    resp = RedirectResponse(url="/", status_code=302)
-    resp.set_cookie("session", sid, httponly=True)
-    return resp
-
-@app.get("/logout")
-async def logout(request: Request):
-    auth_service = AuthService(None) # No DB needed for session deletion
-    sid = request.cookies.get("session")
-    if sid:
-        auth_service.delete_session(sid)
-    resp = RedirectResponse(url="/", status_code=302)
-    resp.delete_cookie("session")
-    return resp
-
-@app.post("/applications")
-async def register_app(
-    name: str = Form(...),
-    redirect_uris: str = Form(...),
-    client_id: str = Form(...),
-    client_secret: str = Form(...),
-    db=Depends(get_db),
-    request: Request = None
-):
-    auth_service = AuthService(db)
-    application_service = ApplicationService(db)
-    owner_id = None
-    sid = request.cookies.get("session") if request else None
-    if sid:
-        owner_id = auth_service.get_session(sid)
-    if not owner_id:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    if application_service.get_application_by_client_id(client_id):
-        raise HTTPException(status_code=400, detail="Client ID exists")
-    app_data = ApplicationCreate(
-        name=name,
-        client_id=client_id,
-        client_secret=client_secret,
-        redirect_uris=json.loads(redirect_uris),
-        owner_id=owner_id,
-    )
-    application_service.create_application(app_data)
-    return {"msg": "application registered"}
-
-@app.get("/authorize")
-async def authorize(
-    response_type: str,
-    client_id: str,
-    redirect_uri: str,
-    scope: str = "",
-    state: str = "",
-    request: Request,
-    db=Depends(get_db)
-):
-    auth_service = AuthService(db)
-    application_service = ApplicationService(db)
-    sid = request.cookies.get("session")
-    user_id = auth_service.get_session(sid) if sid else None
-    app_obj = application_service.get_application_by_client_id(client_id)
-    if not app_obj or redirect_uri not in app_obj.redirect_uris:
-        raise HTTPException(status_code=400, detail="Invalid client or redirect_uri")
-    if not user_id:
-        return templates.TemplateResponse("login.html", {"request": request, "client_id": client_id, "redirect_uri": redirect_uri, "state": state})
-    # Consent page could be shown here, but for minimal version, auto-consent
-    code = auth_service.create_auth_code(user_id, client_id, redirect_uri)
-    url = f"{redirect_uri}?code={code}&state={state}"
-    return RedirectResponse(url=url, status_code=302)
+# Add request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
     
-@app.get("/consent")
-async def consent(
-    request: Request,
-    client_id: str,
-    redirect_uri: str,
-    scope: str,
-    state: str,
-    db=Depends(get_db)
-):
-    auth_service = AuthService(db)
-    application_service = ApplicationService(db)
-    sid = request.cookies.get("session")
-    user_id = auth_service.get_session(sid) if sid else None
-    app_obj = application_service.get_application_by_client_id(client_id)
-    if not app_obj or redirect_uri not in app_obj.redirect_uris:
-        raise HTTPException(status_code=400, detail="Invalid client or redirect_uri")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+    # Log request
+    logger.info(f"Request: {request.method} {request.url}")
+    
+    # Process request
+    response = await call_next(request)
+    
+    # Log response
+    process_time = time.time() - start_time
+    logger.info(
+        f"Response: {response.status_code} - {process_time:.4f}s"
+    )
+    
+    return response
 
-@app.post("/token")
-async def token(
-    grant_type: str = Form(...),
-    code: Optional[str] = Form(None),
-    redirect_uri: Optional[str] = Form(None),
-    client_id: Optional[str] = Form(None),
-    client_secret: Optional[str] = Form(None),
-    refresh_token: Optional[str] = Form(None),
-    db=Depends(get_db)
-):
-    auth_service = AuthService(db)
-    if grant_type == "authorization_code":
-        auth_data = auth_service.consume_auth_code(code)
-        if not auth_data or auth_data["client_id"] != client_id or auth_data["redirect_uri"] != redirect_uri:
-            raise HTTPException(status_code=400, detail="Invalid authorization code")
-        user_id = auth_data["user_id"]
-        access_token = auth_service.create_access_token(data={"sub": user_id})
-        return {"access_token": access_token, "token_type": "bearer"}
-    elif grant_type == "refresh_token":
-        try:
-            payload = auth_service.decode_jwt(refresh_token)
-            user_id = payload["sub"]
-            access_token = auth_service.create_access_token(data={"sub": user_id})
-            return {"access_token": access_token, "token_type": "bearer"}
-        except:
-            raise HTTPException(status_code=400, detail="Invalid refresh token")
-    raise HTTPException(status_code=400, detail="Unsupported grant type")
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Global exception: {exc}", exc_info=True)
+    
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail}
+        )
+    
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"}
+    )
 
-@app.get("/userinfo")
-async def userinfo(token: str = Depends(OAuth2PasswordBearer(tokenUrl="token")), db=Depends(get_db)):
-    auth_service = AuthService(db)
-    user_service = UserService(db)
+# Mount static files
+static_dir = "static"
+if os.path.exists(static_dir) and os.path.isdir(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+else:
+    logger.warning(f"Static directory '{static_dir}' not found, skipping static file mounting")
+
+# Include routers
+app.include_router(auth_router, prefix="/auth")
+app.include_router(oauth_router, prefix="/oauth")
+app.include_router(applications_router, prefix="/api")
+app.include_router(admin_router, prefix="/api/v1")
+
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
     try:
-        payload = auth_service.decode_jwt(token)
-        user_id = payload["sub"]
-        user = user_service.get_user_by_id(user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        return {"sub": user.id, "email": user.email, "name": user.full_name}
-    except:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-@app.get("/.well-known/jwks.json")
-async def jwks():
-    auth_service = AuthService(None) # No DB needed for public key
-    public_key_pem = auth_service.get_public_key()
-    # Parse the PEM formatted public key to extract n and e
-    # This is a simplified example, a real implementation would use a proper JWK library
-    # For now, we'll just return a dummy JWK with the actual public key content
+        # Check database connection
+        from app.core.database import SessionLocal
+        from sqlalchemy import text
+        db = SessionLocal()
+        try:
+            result = db.execute(text("SELECT 1")).fetchone()
+            if result and result[0] == 1:
+                db_status = "healthy"
+            else:
+                db_status = "unhealthy"
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+        db_status = "unhealthy"
+    
+    try:
+        # Check cache connection
+        cache = get_cache()
+        cache.ping()
+        cache_status = "healthy"
+    except Exception as e:
+        logger.error(f"Cache health check failed: {e}")
+        cache_status = "unhealthy"
+    
     return {
-        "keys": [
-            {
-                "kty": "RSA",
-                "use": "sig",
-                "kid": "1", # Key ID
-                "alg": settings.jwt_algorithm,
-                "n": public_key_pem, # In a real scenario, this would be the base64url encoded modulus
-                "e": "AQAB" # Base64url encoded public exponent
-            }
-        ]
+        "status": "healthy" if db_status == "healthy" and cache_status == "healthy" else "unhealthy",
+        "database": db_status,
+        "cache": cache_status,
+        "version": settings.app_version
     }
 
-@app.get("/.well-known/openid-configuration")
-async def oidc_config(request: Request):
-    host = request.url.scheme + "://" + request.url.hostname
+# Root endpoint
+@app.get("/")
+async def root():
+    """Root endpoint with API information"""
     return {
-        "issuer": host,
-        "authorization_endpoint": host + "/authorize",
-        "token_endpoint": host + "/token",
-        "userinfo_endpoint": host + "/userinfo",
-        "jwks_uri": host + "/.well-known/jwks.json",
-        "response_types_supported": ["code"],
-        "subject_types_supported": ["public"],
-        "id_token_signing_alg_values_supported": [settings.jwt_algorithm],
-        "scopes_supported": ["openid", "profile", "email"],
-        "token_endpoint_auth_methods_supported": ["client_secret_post"],
+        "message": f"Welcome to {settings.app_name}",
+        "description": settings.app_description,
+        "version": settings.app_version,
+        "docs": "/docs" if settings.debug else "Documentation not available in production",
+        "health": "/health"
     }
+
+# Startup event
+@app.on_event("startup")
+async def startup_event():
+    """Application startup event"""
+    logger.info(f"Starting {settings.app_name} v{settings.app_version}")
+    
+    # Create database tables
+    try:
+        create_tables()
+        logger.info("Database tables created successfully")
+    except Exception as e:
+        logger.error(f"Failed to create database tables: {e}")
+    
+    # Test cache connection
+    try:
+        cache = get_cache()
+        cache.ping()
+        logger.info("Cache connection established")
+    except Exception as e:
+        logger.error(f"Failed to connect to cache: {e}")
+
+# Shutdown event
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Application shutdown event"""
+    logger.info(f"Shutting down {settings.app_name}")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=settings.debug,
+        log_level="debug" if settings.debug else "info"
+    )

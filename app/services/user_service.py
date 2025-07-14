@@ -34,7 +34,8 @@ class UserService:
         db_user = User(
             username=user_data.username,
             email=user_data.email,
-            hashed_password=hashed_password
+            hashed_password=hashed_password,
+            is_superuser=user_data.is_superuser
         )
         
         self.db.add(db_user)
@@ -85,6 +86,8 @@ class UserService:
         
         # Reset failed attempts on successful login
         user.reset_failed_attempts()
+        # Update last login timestamp
+        user.last_login = datetime.utcnow()
         self.db.commit()
         return user
     

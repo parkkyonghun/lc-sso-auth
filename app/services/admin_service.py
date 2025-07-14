@@ -73,8 +73,8 @@ class AdminService:
         
         # User statistics
         total_users = self.db.query(User).count()
-        active_users = self.db.query(User).filter(User.is_active == True).count()
-        verified_users = self.db.query(User).filter(User.is_verified == True).count()
+        active_users = self.db.query(User).filter(User.is_active).count()
+        verified_users = self.db.query(User).filter(User.is_verified).count()
         
         # Recent user registrations (last 30 days)
         thirty_days_ago = datetime.utcnow() - timedelta(days=30)
@@ -85,7 +85,7 @@ class AdminService:
         # Application statistics
         total_applications = self.db.query(Application).count()
         active_applications = self.db.query(Application).filter(
-            Application.is_active == True
+            Application.is_active
         ).count()
         
         # Recent applications (last 30 days)
@@ -100,7 +100,7 @@ class AdminService:
         ).count()
         
         unverified_users = self.db.query(User).filter(
-            User.is_verified == False
+            not User.is_verified
         ).count()
         
         return SystemStatsResponse(
@@ -115,41 +115,6 @@ class AdminService:
             unverified_users=unverified_users)
     
     # Role and Permission Management Methods
-    def assign_role_to_user(self, admin_user_id: str, user_id: str, role_name: str) -> bool:
-        """Assign a role to a user"""
-        self.verify_permission(admin_user_id, "manage_user_roles")
-        return self.permission_service.assign_role_to_user(user_id, role_name)
-    
-    def remove_role_from_user(self, admin_user_id: str, user_id: str, role_name: str) -> bool:
-        """Remove a role from a user"""
-        self.verify_permission(admin_user_id, "manage_user_roles")
-        return self.permission_service.remove_role_from_user(user_id, role_name)
-    
-    def get_user_roles(self, admin_user_id: str, user_id: str) -> List[str]:
-        """Get all roles assigned to a user"""
-        self.verify_permission(admin_user_id, "view_users")
-        return self.permission_service.get_user_roles(user_id)
-    
-    def get_user_permissions(self, admin_user_id: str, user_id: str) -> List[str]:
-        """Get all permissions for a user"""
-        self.verify_permission(admin_user_id, "view_users")
-        return self.permission_service.get_user_permissions(user_id)
-    
-    def get_all_roles(self, admin_user_id: str) -> List[dict]:
-        """Get all available roles"""
-        self.verify_permission(admin_user_id, "view_roles")
-        roles = self.db.query(Role).all()
-        return [{
-            "id": role.id,
-            "role_name": role.role_name,
-            "description": role.description,
-            "permissions": [p.permission_name for p in role.permissions]
-        } for role in roles]
-    
-    def get_all_permissions(self, admin_user_id: str) -> List[dict]:
-        """Get all available permissions"""
-        self.verify_permission(admin_user_id, "view_permissions")
-        return self.permission_service.get_all_permissions()
     
     def get_user_stats(self, admin_user_id: str) -> UserStatsResponse:
         """Get detailed user statistics"""

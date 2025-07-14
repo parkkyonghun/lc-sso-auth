@@ -4,12 +4,8 @@ Organization management routes for Flask Admin Panel (Class-Based Views)
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask.views import MethodView
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from auth import login_required
-from api_client import api_client
+from flask_admin.auth import login_required
+from flask_admin.api_client import api_client
 
 organization_bp = Blueprint('organization', __name__, url_prefix='/organization')
 

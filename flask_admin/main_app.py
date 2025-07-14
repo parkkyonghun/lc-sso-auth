@@ -7,8 +7,7 @@ Refactored into modular components for better maintainability.
 """
 
 from flask import Flask
-from config import Config
-from api_client import api_client
+from flask_admin.config import Config
 from datetime import datetime
 
 
