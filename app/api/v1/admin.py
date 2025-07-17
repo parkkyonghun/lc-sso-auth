@@ -2,22 +2,23 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
-from ..core.database import get_db
-from ..api.auth import require_auth
-from ..models.user import User
-from ..models.branch import Branch
-from ..models.department import Department
-from ..models.position import Position
-from ..services.admin_service import AdminService
-from ..schemas.admin import (
+from ...core.database import get_db
+from .auth import require_auth
+from ...models.user import User
+from ...models.branch import Branch
+from ...models.department import Department
+from ...models.position import Position
+from ...services.admin_service import AdminService
+from ...schemas.admin import (
     SystemStatsResponse, UserStatsResponse, AdminUserCreate, AdminUserUpdate,
     AdminApplicationUpdate, UserSearchResponse, ApplicationSearchResponse,
     ActivityResponse, AdminDashboardResponse, UserDetailResponse,
     ApplicationDetailResponse, BulkUserAction, BulkApplicationAction,
     AdminActionResponse, RoleResponse, PermissionResponse, RoleCreateRequest,
-    PermissionCreateRequest, RoleUpdateRequest
+    PermissionCreateRequest, RoleUpdateRequest,
+    UserSearchItem, BranchBase, DepartmentBase, PositionBase
 )
-from ..schemas.organization import (
+from ...schemas.organization import (
     BranchResponse, DepartmentResponse, PositionResponse,
     BranchCreateRequest, BranchUpdateRequest,
     DepartmentCreateRequest, DepartmentUpdateRequest,
@@ -25,7 +26,7 @@ from ..schemas.organization import (
     OrganizationDeleteResponse
 )
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(tags=["admin"])
 
 @router.get("/dashboard", response_model=AdminDashboardResponse)
 async def get_admin_dashboard(
@@ -108,19 +109,24 @@ async def search_users(
     
     users, total = admin_service.search_users(str(current_user.id), q or "", skip, limit)
     
-    user_data = [{
-        "id": str(user.id),
-        "username": user.username,
-        "email": user.email,
-        "full_name": user.full_name,
-        "is_active": user.is_active,
-        "is_verified": user.is_verified,
-        "is_superuser": user.is_superuser,
-        "created_at": user.created_at.isoformat(),
-        "updated_at": user.updated_at.isoformat(),
-        "last_login": user.last_login.isoformat() if user.last_login else None,
-        "is_locked": user.is_locked()
-    } for user in users]
+    user_data = [
+        UserSearchItem(
+            id=user.id, # type: ignore
+            username=user.username, # type: ignore
+            email=user.email, # type: ignore
+            full_name=user.full_name, # type: ignore
+            is_active=user.is_active, # type: ignore
+            is_verified=user.is_verified, # type: ignore
+            is_superuser=user.is_superuser, # type: ignore
+            created_at=user.created_at, # type: ignore
+            updated_at=user.updated_at, # type: ignore
+            branch=BranchBase(branch_name=user.branch.branch_name) if user.branch else None,
+            department=DepartmentBase(department_name=user.department.department_name) if user.department else None,
+            position=PositionBase(title=user.position.title) if user.position else None,
+            manager_name=user.manager_name # type: ignore
+        )
+        for user in users
+    ]
     
     return UserSearchResponse(
         users=user_data,
@@ -137,7 +143,7 @@ async def get_user_detail(
 ):
     """Get detailed user information"""
     from sqlalchemy.orm import joinedload
-    from ..models.user import User
+    from ...models.user import User
     
     admin_service = AdminService(db)
     admin_service.verify_admin_access(str(current_user.id))
@@ -166,7 +172,7 @@ async def create_user(
     """Create a new user (admin only)"""
     admin_service = AdminService(db)
     user = admin_service.create_user_as_admin(str(current_user.id), user_data)
-    return UserDetailResponse.model_validate(user)
+    return UserDetailResponse.from_orm(user)
 
 @router.put("/users/{user_id}", response_model=UserDetailResponse)
 async def update_user(
@@ -178,7 +184,7 @@ async def update_user(
     """Update user (admin only)"""
     admin_service = AdminService(db)
     user = admin_service.update_user_as_admin(str(current_user.id), user_id, user_data)
-    return UserDetailResponse.model_validate(user)
+    return UserDetailResponse.from_orm(user)
 
 @router.delete("/users/{user_id}", response_model=AdminActionResponse)
 async def delete_user(
@@ -232,7 +238,7 @@ async def get_user_roles(
 ):
     """Get roles assigned to a user"""
     admin_service = AdminService(db)
-    roles = admin_service.get_user_roles(str(current_user.id), user_id)
+    roles = admin_service.get_user_roles(str(current_user.id), user_id) # type: ignore
     return {"user_id": user_id, "roles": roles}
 
 @router.get("/users/{user_id}/permissions")
@@ -243,7 +249,7 @@ async def get_user_permissions(
 ):
     """Get permissions for a user"""
     admin_service = AdminService(db)
-    permissions = admin_service.get_user_permissions(str(current_user.id), user_id)
+    permissions = admin_service.get_user_permissions(str(current_user.id), user_id) # type: ignore
     return {"user_id": user_id, "permissions": permissions}
 
 @router.post("/users/{user_id}/roles/{role_name}", response_model=AdminActionResponse)
@@ -255,7 +261,7 @@ async def assign_role_to_user(
 ):
     """Assign a role to a user"""
     admin_service = AdminService(db)
-    success = admin_service.assign_role_to_user(str(current_user.id), user_id, role_name)
+    success = admin_service.assign_role_to_user(str(current_user.id), user_id, role_name) # type: ignore
     
     if success:
         return AdminActionResponse(
@@ -277,7 +283,7 @@ async def remove_role_from_user(
 ):
     """Remove a role from a user"""
     admin_service = AdminService(db)
-    success = admin_service.remove_role_from_user(str(current_user.id), user_id, role_name)
+    success = admin_service.remove_role_from_user(str(current_user.id), user_id, role_name) # type: ignore
     
     if success:
         return AdminActionResponse(
@@ -462,9 +468,9 @@ async def get_all_roles(
     roles = admin_service.get_all_roles()
     return [RoleResponse(
         id=str(role.id),
-        role_name=role.role_name,
-        description=role.description,
-        permissions=[p.permission_name for p in role.permissions]
+        role_name=str(role.role_name),
+        description=str(role.description) if role.description is not None else None,
+        permissions=[str(p.permission_name) for p in role.permissions]
     ) for role in roles]
 
 @router.post("/roles", response_model=RoleResponse)
@@ -480,9 +486,9 @@ async def create_role(
     role = admin_service.create_role(role_data.role_name, role_data.description, role_data.permissions)
     return RoleResponse(
         id=str(role.id),
-        role_name=role.role_name,
-        description=role.description,
-        permissions=[p.permission_name for p in role.permissions]
+        role_name=str(role.role_name),
+        description=str(role.description) if role.description is not None else None,
+        permissions=[str(p.permission_name) for p in role.permissions]
     )
 
 @router.put("/roles/{role_id}", response_model=RoleResponse)
@@ -502,9 +508,9 @@ async def update_role(
 
     return RoleResponse(
         id=str(role.id),
-        role_name=role.role_name,
-        description=role.description,
-        permissions=[p.permission_name for p in role.permissions]
+        role_name=str(role.role_name),
+        description=str(role.description) if role.description is not None else None,
+        permissions=[str(p.permission_name) for p in role.permissions]
     )
 
 @router.delete("/roles/{role_id}", response_model=AdminActionResponse)
@@ -536,8 +542,8 @@ async def get_all_permissions(
     permissions = admin_service.get_all_permissions()
     return [PermissionResponse(
         id=str(perm.id),
-        permission_name=perm.permission_name,
-        description=perm.description
+        permission_name=str(perm.permission_name),
+        description=str(perm.description) if perm.description is not None else None
     ) for perm in permissions]
 
 @router.post("/permissions", response_model=PermissionResponse)
@@ -556,8 +562,8 @@ async def create_permission(
     )
     return PermissionResponse(
         id=str(permission.id),
-        permission_name=permission.permission_name,
-        description=permission.description
+        permission_name=str(permission.permission_name),
+        description=str(permission.description) if permission.description is not None else None
     )
 
 @router.delete("/permissions/{permission_id}", response_model=AdminActionResponse)
@@ -597,10 +603,10 @@ async def get_all_branches(
     return [
         BranchResponse(
             id=str(branch.id),
-            branch_name=branch.branch_name,
-            branch_code=branch.branch_code,
-            address=branch.address,
-            province=branch.province
+            branch_name=str(branch.branch_name),
+            branch_code=str(branch.branch_code),
+            address=str(branch.address) if branch.address is not None else None,
+            province=str(branch.province) if branch.province is not None else None
         ) for branch in branches
     ]
 
@@ -662,13 +668,13 @@ async def update_branch(
         raise HTTPException(status_code=404, detail="Branch not found")
 
     if branch_data.name is not None:
-        branch.branch_name = branch_data.name
+        branch.branch_name = branch_data.name # type: ignore
     if branch_data.code is not None:
-        branch.branch_code = branch_data.code
+        branch.branch_code = branch_data.code # type: ignore
     if branch_data.address is not None:
-        branch.address = branch_data.address
+        branch.address = branch_data.address # type: ignore
     if branch_data.province is not None:
-        branch.province = branch_data.province
+        branch.province = branch_data.province # type: ignore
 
     db.commit()
     db.refresh(branch)
@@ -723,8 +729,8 @@ async def get_all_departments(
     return [
         DepartmentResponse(
             id=str(dept.id),
-            department_name=dept.department_name,
-            description=dept.description
+            department_name=str(dept.department_name),
+            description=str(dept.description) if dept.description is not None else None
         ) for dept in departments
     ]
 
@@ -780,9 +786,9 @@ async def update_department(
         raise HTTPException(status_code=404, detail="Department not found")
 
     if department_data.name is not None:
-        department.department_name = department_data.name
+        department.department_name = department_data.name # type: ignore
     if department_data.description is not None:
-        department.description = department_data.description
+        department.description = department_data.description # type: ignore
 
     db.commit()
     db.refresh(department)
@@ -832,9 +838,9 @@ async def get_all_positions(
     return [
         PositionResponse(
             id=str(pos.id),
-            title=pos.title,
-            department_id=str(pos.department_id) if pos.department_id else None,
-            department_name=pos.department.department_name if pos.department else None
+            title=str(pos.title),
+            department_id=str(pos.department_id),
+            department_name=str(pos.department.department_name) if pos.department else None
         ) for pos in positions
     ]
 
@@ -873,9 +879,9 @@ async def update_position(
         raise HTTPException(status_code=404, detail="Position not found")
     
     if "title" in position_data:
-        position.title = position_data["title"]
+        position.title = position_data["title"] # type: ignore
     if "department_id" in position_data:
-        position.department_id = position_data["department_id"]
+        position.department_id = position_data["department_id"] # type: ignore
     
     db.commit()
     db.refresh(position)

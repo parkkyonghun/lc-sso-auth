@@ -6,6 +6,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_admin.auth import login_required, super_admin_required
 from flask_admin.api_client import api_client, get_branches, get_departments, get_positions
 from flask_admin.forms import UserForm
+from datetime import datetime
 
 users_bp = Blueprint('users', __name__, url_prefix='/users')
 
@@ -37,9 +38,23 @@ def users():
             return redirect(url_for('main.logout'))
         result = {'users': [], 'total': 0, 'page': 1, 'pages': 1}
 
+    users_data = result.get('users', [])
+    for user in users_data:
+        if user.get('created_at'):
+            try:
+                user['created_at'] = datetime.fromisoformat(user['created_at'].replace('Z', '+00:00'))
+            except (ValueError, TypeError):
+                user['created_at'] = None  # Or handle as an error
+        if user.get('last_login'):
+            try:
+                user['last_login'] = datetime.fromisoformat(user['last_login'].replace('Z', '+00:00'))
+            except (ValueError, TypeError):
+                user['last_login'] = None
+
+
     # Create data object for template
     data = {
-        'users': result.get('users', []),
+        'users': users_data,
         'total': result.get('total', 0),
         'page': result.get('page', 1),
         'pages': result.get('pages', 1)
@@ -61,8 +76,8 @@ def edit_user(user_id=None):
     is_edit = user_id and user_id != '0'
     
     # Populate form choices
-    form.branch.choices = [('', 'Select Branch')] + [(str(b['id']), b['name']) for b in get_branches()]
-    form.department.choices = [('', 'Select Department')] + [(str(d['id']), d['name']) for d in get_departments()]
+    form.branch.choices = [('', 'Select Branch')] + [(str(b['id']), b['branch_name']) for b in get_branches()]
+    form.department.choices = [('', 'Select Department')] + [(str(d['id']), d['department_name']) for d in get_departments()]
     form.position.choices = [('', 'Select Position')] + [(str(p['id']), p['title']) for p in get_positions()]
     
     if is_edit:
@@ -88,9 +103,9 @@ def edit_user(user_id=None):
             form.bio.data = user_data.get('bio', '')
             form.timezone.data = user_data.get('timezone', '')
             form.language.data = user_data.get('language', '')
-            form.branch.data = user_data.get('branch_id', '')
-            form.department.data = user_data.get('department_id', '')
-            form.position.data = user_data.get('position_id', '')
+            form.branch.data = str(user_data.get('branch_id', '')) if user_data.get('branch_id') else ''
+            form.department.data = str(user_data.get('department_id', '')) if user_data.get('department_id') else ''
+            form.position.data = str(user_data.get('position_id', '')) if user_data.get('position_id') else ''
             form.manager_name.data = user_data.get('manager_name', '')
 
     if form.validate_on_submit():

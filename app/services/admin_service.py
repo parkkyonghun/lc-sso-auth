@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
-from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, and_
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, desc, and_, or_
 from fastapi import HTTPException, status
 from datetime import datetime, timedelta
 
@@ -24,17 +24,17 @@ class AdminService:
         from .permission_service import PermissionService
         self.permission_service = PermissionService(db)
     
-    def verify_admin_access(self, user_id: str) -> bool:
+    def verify_admin_access(self, user_id: str) -> bool: # type: ignore
         """Verify if user has admin access"""
         user = self.user_service.get_user_by_id(user_id)
-        if not user or not user.is_active:
+        if not user or not user.is_active: # type: ignore
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Admin access required"
             )
         
         # Superuser always has access
-        if user.is_superuser:
+        if user.is_superuser: # type: ignore
             return True
         
         # Check if user has any admin-level permissions
@@ -51,10 +51,10 @@ class AdminService:
             detail="Admin access required"
         )
     
-    def verify_permission(self, user_id: str, permission: str) -> bool:
+    def verify_permission(self, user_id: str, permission: str) -> bool: # type: ignore
         """Verify if user has specific permission"""
         user = self.user_service.get_user_by_id(user_id)
-        if not user or not user.is_active:
+        if not user or not user.is_active: # type: ignore
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied"
@@ -95,12 +95,11 @@ class AdminService:
         
         # Security statistics
         locked_users = self.db.query(User).filter(
-            User.lockout_until.isnot(None),
-            User.lockout_until > datetime.utcnow()
+            and_(User.lockout_until.isnot(None), User.lockout_until > datetime.utcnow()) # type: ignore
         ).count()
         
         unverified_users = self.db.query(User).filter(
-            not User.is_verified
+            User.is_verified == False
         ).count()
         
         return SystemStatsResponse(
@@ -145,11 +144,11 @@ class AdminService:
             User.last_login.isnot(None)
         ).order_by(desc(User.last_login)).limit(10).all()
         
-        top_users = [{
+        top_users = [{ # type: ignore
             "id": str(user.id),
             "username": user.username,
             "email": user.email,
-            "last_login": user.last_login.isoformat() if user.last_login else None
+            "last_login": user.last_login.isoformat() if user.last_login is not None else None
         } for user in active_users]
         
         return UserStatsResponse(
@@ -164,13 +163,20 @@ class AdminService:
         db_query = self.db.query(User)
         
         if query:
-            search_filter = func.lower(User.username).contains(query.lower()) | \
-                          func.lower(User.email).contains(query.lower()) | \
-                          func.lower(User.full_name).contains(query.lower())
+            search_filter = (
+                func.lower(User.username).contains(query.lower()) |
+                func.lower(User.email).contains(query.lower()) |
+                func.lower(User.full_name).contains(query.lower()) |
+                func.lower(User.manager_name).contains(query.lower())
+            )
             db_query = db_query.filter(search_filter)
         
         total = db_query.count()
         users = db_query.order_by(desc(User.created_at)).offset(skip).limit(limit).all()
+
+        # Explicitly refresh relationships to ensure latest data is loaded
+        for user in users:
+            self.db.refresh(user, attribute_names=['branch', 'department', 'position'])
         
         return users, total
     
@@ -180,11 +186,11 @@ class AdminService:
         
         # Check if username or email already exists
         existing_user = self.db.query(User).filter(
-            (User.username == user_data.username) | (User.email == user_data.email)
+            or_(User.username == user_data.username, User.email == user_data.email)
         ).first()
         
-        if existing_user:
-            if existing_user.username == user_data.username:
+        if existing_user is not None:
+            if getattr(existing_user, 'username') == user_data.username: # type: ignore
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Username already registered"
@@ -233,7 +239,6 @@ class AdminService:
         for field, value in update_data.items():
             setattr(user, field, value)
         
-        user.updated_at = datetime.utcnow()
         self.db.commit()
         self.db.refresh(user)
         return user
@@ -283,7 +288,6 @@ class AdminService:
         for field, value in update_data.items():
             setattr(app, field, value)
         
-        app.updated_at = datetime.utcnow()
         self.db.commit()
         self.db.refresh(app)
         return app
@@ -310,7 +314,6 @@ class AdminService:
         
         user.lockout_until = None
         user.failed_login_attempts = 0
-        user.updated_at = datetime.utcnow()
         self.db.commit()
         return True
     
@@ -346,14 +349,74 @@ class AdminService:
         return activities[:limit]
 
     # Role Management Methods
+    def get_user_roles(self, admin_user_id: str, user_id: str) -> List[str]:
+        """Get roles assigned to a user"""
+        self.verify_permission(admin_user_id, "view_user_roles")
+        user = self.user_service.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        return [role.role_name for role in user.roles]
+
+    def get_user_permissions(self, admin_user_id: str, user_id: str) -> List[str]:
+        """Get permissions for a user"""
+        self.verify_permission(admin_user_id, "view_user_permissions")
+        user = self.user_service.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        
+        permissions = set()
+        for role in user.roles:
+            for perm in role.permissions:
+                permissions.add(perm.permission_name)
+        return list(permissions)
+    
+    def assign_role_to_user(self, admin_user_id: str, user_id: str, role_name: str) -> bool:
+        """Assign a role to a user"""
+        self.verify_permission(admin_user_id, "manage_user_roles")
+        user = self.user_service.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        
+        role = self.db.query(Role).filter(Role.role_name == role_name).first()
+        if not role:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+        
+        if role in user.roles:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already has this role")
+            
+        user.roles.append(role)
+        self.db.commit()
+        self.db.refresh(user)
+        return True
+        
+    def remove_role_from_user(self, admin_user_id: str, user_id: str, role_name: str) -> bool:
+        """Remove a role from a user"""
+        self.verify_permission(admin_user_id, "manage_user_roles")
+        user = self.user_service.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        
+        role = self.db.query(Role).filter(Role.role_name == role_name).first()
+        if not role:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+        
+        if role not in user.roles:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User does not have this role")
+            
+        user.roles.remove(role)
+        self.db.commit()
+        self.db.refresh(user)
+        return True
+
+    # Role Management Methods
     def get_all_roles(self) -> List[Role]:
         """Get all roles"""
         return self.db.query(Role).all()
 
-    def create_role(self, role_name: str, description: str = None, permissions: List[str] = None) -> Role:
+    def create_role(self, role_name: str, description: Optional[str] = None, permissions: Optional[List[str]] = None) -> Role:
         """Create a new role"""
         # Check if role already exists
-        existing_role = self.db.query(Role).filter(Role.role_name == role_name).first()
+        existing_role = self.db.query(Role).filter(Role.role_name == role_name).first() # type: ignore
         if existing_role:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -422,10 +485,10 @@ class AdminService:
         """Get all permissions"""
         return self.db.query(Permission).all()
 
-    def create_permission(self, permission_name: str, description: str = None) -> Permission:
+    def create_permission(self, permission_name: str, description: Optional[str] = None) -> Permission:
         """Create a new permission"""
         # Check if permission already exists
-        existing_perm = self.db.query(Permission).filter(Permission.permission_name == permission_name).first()
+        existing_perm = self.db.query(Permission).filter(Permission.permission_name == permission_name).first() # type: ignore
         if existing_perm:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

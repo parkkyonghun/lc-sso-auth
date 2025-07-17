@@ -110,9 +110,9 @@
                             </div>
                         </td>
                         <td>{{ user.full_name }}</td>
-                        <td>{{ user.branch }}</td>
-                        <td>{{ user.department }}</td>
-                        <td>{{ user.position }}</td>
+                        <td>{{ user.branch_name }}</td>
+                        <td>{{ user.department_name }}</td>
+                        <td>{{ user.position_title }}</td>
                         <td>{{ user.manager_name or '-' }}</td>
                         <td>
                             {% if user.effective_permissions %}

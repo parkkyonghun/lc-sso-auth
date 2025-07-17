@@ -1,4 +1,5 @@
 from typing import List, Optional, Dict, Any
+from uuid import UUID
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from ..models.base_organization import BaseOrganizationEntity
@@ -68,9 +69,38 @@ class AdminApplicationUpdate(BaseModel):
     access_token_lifetime: Optional[int] = None
     refresh_token_lifetime: Optional[int] = None
 
+class BranchBase(BaseModel):
+    branch_name: Optional[str] = None
+
+class DepartmentBase(BaseModel):
+    department_name: Optional[str] = None
+
+class PositionBase(BaseModel):
+    title: Optional[str] = None
+
+class UserSearchItem(BaseModel):
+    """Schema for a single user item in search results, including organizational data."""
+    id: UUID
+    username: str
+    email: str
+    full_name: Optional[str] = None
+    is_active: bool
+    is_verified: bool
+    is_superuser: bool
+    created_at: datetime
+    updated_at: datetime
+    
+    branch: Optional[BranchBase] = None
+    department: Optional[DepartmentBase] = None
+    position: Optional[PositionBase] = None
+    manager_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 class UserSearchResponse(BaseModel):
     """Response for user search"""
-    users: List[Dict[str, Any]]
+    users: List[UserSearchItem]
     total: int
     page: int
     limit: int
@@ -94,7 +124,7 @@ class AdminDashboardResponse(BaseModel):
 
 class UserDetailResponse(BaseModel):
     """Detailed user information for admin"""
-    id: str
+    id: UUID
     username: str
     email: str
     full_name: Optional[str]
@@ -106,56 +136,25 @@ class UserDetailResponse(BaseModel):
     last_login: Optional[datetime]
     created_at: datetime
     updated_at: datetime
-    
+
     # Profile fields
     bio: Optional[str] = None
     timezone: Optional[str] = None
     language: Optional[str] = None
     manager_name: Optional[str] = None
-    
+
     # Organization fields
-    branch_id: Optional[str] = None
-    department_id: Optional[str] = None
-    position_id: Optional[str] = None
-    
+    branch_id: Optional[UUID] = None
+    department_id: Optional[UUID] = None
+    position_id: Optional[UUID] = None
+
     # Organization details
     branch_name: Optional[str] = None
     department_name: Optional[str] = None
     position_title: Optional[str] = None
-    
+
     class Config:
         from_attributes = True
-        
-    @classmethod
-    def from_orm(cls, obj):
-        """Custom from_orm to handle UUID to string conversion"""
-        return cls(
-            id=str(obj.id),
-            username=obj.username,
-            email=obj.email,
-            full_name=obj.full_name,
-            is_active=obj.is_active,
-            is_verified=obj.is_verified,
-            is_superuser=obj.is_superuser,
-            failed_login_attempts=obj.failed_login_attempts,
-            lockout_until=obj.lockout_until,
-            last_login=obj.last_login,
-            created_at=obj.created_at,
-            updated_at=obj.updated_at,
-            # Profile fields
-            bio=obj.bio,
-            timezone=obj.timezone,
-            language=obj.language,
-            manager_name=obj.manager_name,
-            # Organization fields
-            branch_id=str(obj.branch_id) if obj.branch_id else None,
-            department_id=str(obj.department_id) if obj.department_id else None,
-            position_id=str(obj.position_id) if obj.position_id else None,
-            # Organization details
-            branch_name=BaseOrganizationEntity.get_display_name(obj.branch) if obj.branch else None,
-            department_name=BaseOrganizationEntity.get_display_name(obj.department) if obj.department else None,
-            position_title=BaseOrganizationEntity.get_display_name(obj.position) if obj.position else None
-        )
 
 class ApplicationDetailResponse(BaseModel):
     """Detailed application information for admin"""
